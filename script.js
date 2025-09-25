@@ -187,6 +187,9 @@ async function initializeDashboard() {
     
     // Update flight information
     updateFlightInfo();
+    
+    // Initialize dynamic weather wallpaper
+    initializeWeatherWallpaper();
 }
 
 // Create professional animated map visualization
@@ -214,30 +217,25 @@ function createAnimatedMap() {
         'KSEA': { name: 'Seattle-Tacoma Intl', city: 'Seattle' }
     };
     
-    // Create professional pushpin waypoints
+    // Create professional pushpin waypoints with 📍
     routeData.forEach((waypoint, index) => {
-        const pin = document.createElement('div');
-        pin.className = 'waypoint-pin';
-        
         // Position pins along the route
         const leftPercent = 10 + (index * 80 / (routeData.length - 1));
-        pin.style.left = `${leftPercent}%`;
-        pin.style.top = '50%';
         
         // Add airport data attributes
         const airportInfo = airportDatabase[waypoint] || { name: waypoint, city: 'Unknown' };
-        pin.setAttribute('data-code', waypoint);
-        pin.setAttribute('data-name', `${airportInfo.name}\n${airportInfo.city}`);
+        const fullName = `${airportInfo.name} - ${airportInfo.city}`;
         
-        // Add departure/destination classes
+        // Determine pin type
+        let pinType = 'waypoint';
         if (index === 0) {
-            pin.classList.add('departure');
+            pinType = 'departure';
         } else if (index === routeData.length - 1) {
-            pin.classList.add('destination');
-        } else {
-            pin.classList.add('waypoint');
+            pinType = 'destination';
         }
         
+        // Create pin using the new function
+        const pin = createWaypointPin(waypoint, fullName, leftPercent, 50, pinType);
         waypointPins.appendChild(pin);
     });
     
@@ -407,6 +405,12 @@ function displaySummaryPoints(points) {
         
         summaryPoints.appendChild(pointElement);
     });
+    
+    // Update weather wallpaper based on new summary points
+    setTimeout(() => {
+        const weatherConditions = analyzeWeatherConditions();
+        applyWeatherWallpaper(weatherConditions);
+    }, 100);
 }
 
 // Get visibility from METAR/TAF data
@@ -449,6 +453,80 @@ async function getVisibilityFromMetarTaf(icaoCode) {
         console.error('Visibility fetch error:', error);
         return { display: 'N/A', km: null, badge: 'unknown' };
     }
+}
+
+// Dynamic Weather Wallpaper System
+function initializeWeatherWallpaper() {
+    // Analyze current weather conditions to determine wallpaper
+    const weatherConditions = analyzeWeatherConditions();
+    applyWeatherWallpaper(weatherConditions);
+}
+
+function analyzeWeatherConditions() {
+    // Analyze weather data to determine conditions
+    const summaryPoints = document.getElementById('summaryPoints');
+    const points = summaryPoints.querySelectorAll('.summary-bullet');
+    
+    let conditions = {
+        hasStorms: false,
+        hasTurbulence: false,
+        hasClear: false,
+        hasClouds: false
+    };
+    
+    points.forEach(point => {
+        const text = point.textContent.toLowerCase();
+        if (text.includes('storm') || text.includes('thunderstorm') || text.includes('severe')) {
+            conditions.hasStorms = true;
+        }
+        if (text.includes('turbulence') || text.includes('rough')) {
+            conditions.hasTurbulence = true;
+        }
+        if (text.includes('clear') || text.includes('good')) {
+            conditions.hasClear = true;
+        }
+        if (text.includes('cloud') || text.includes('overcast')) {
+            conditions.hasClouds = true;
+        }
+    });
+    
+    return conditions;
+}
+
+function applyWeatherWallpaper(conditions) {
+    const body = document.body;
+    
+    // Remove existing weather classes
+    body.classList.remove('clear-weather', 'cloudy-weather', 'stormy-weather', 'turbulent-weather');
+    
+    // Apply appropriate weather class based on conditions
+    if (conditions.hasStorms) {
+        body.classList.add('stormy-weather');
+    } else if (conditions.hasTurbulence) {
+        body.classList.add('turbulent-weather');
+    } else if (conditions.hasClouds) {
+        body.classList.add('cloudy-weather');
+    } else if (conditions.hasClear) {
+        body.classList.add('clear-weather');
+    }
+}
+
+// Update waypoint pins to use 📍
+function createWaypointPin(icaoCode, fullName, x, y, type = 'waypoint') {
+    const pin = document.createElement('div');
+    pin.className = `waypoint-pin ${type}`;
+    pin.style.left = `${x}%`;
+    pin.style.top = `${y}%`;
+    pin.setAttribute('data-code', icaoCode);
+    pin.setAttribute('data-name', fullName);
+    pin.innerHTML = '📍';
+    
+    // Add hover tooltip
+    pin.addEventListener('mouseenter', () => {
+        pin.title = `${icaoCode} - ${fullName}`;
+    });
+    
+    return pin;
 }
 
 // Removed formatSummaryPoint function - now using simple bullet points

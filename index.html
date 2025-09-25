@@ -66,35 +66,10 @@
                             <div class="loading">Analyzing weather data...</div>
                         </div>
                     </div>
-                </div>
-                
-                <div class="dashboard-content">
-                    <div class="info-section">
-                        <h3>Flight Information</h3>
-                        <div class="info-item">
-                            <span>Total Distance:</span>
-                            <span id="totalDistance">Calculating...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Estimated Flight Time:</span>
-                            <span id="flightTime">Calculating...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Weather Status:</span>
-                            <span id="weatherStatus">Analyzing...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Route Complexity:</span>
-                            <span id="routeComplexity">Evaluating...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Last Updated:</span>
-                            <span id="lastUpdated">Just now</span>
-                        </div>
-                    </div>
                     
-                    <div class="widgets-section">
-                        <div class="widget">
+                    <!-- Horizontal Widgets Row -->
+                    <div class="horizontal-widgets">
+                        <div class="widget" id="widgetCurrentWeather">
                             <h4>Current Weather</h4>
                             <div class="widget-content">
                                 Temperature: 22°C<br>
@@ -102,9 +77,6 @@
                                 Visibility: 10km
                             </div>
                         </div>
-                        
-                        
-                        <!-- New Widgets -->
 
                         <div class="widget" id="widgetVisibility">
                             <h4>Visibility</h4>
@@ -139,6 +111,33 @@
                                 <div>Speed: <span id="windSpeed">N/A</span></div>
                                 <div>Gusts: <span id="windGusts">N/A</span></div>
                                 <div class="metric-badge" id="windBadge">Unknown</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Flight Information -->
+                    <div class="flight-info-section">
+                        <h3>Flight Information</h3>
+                        <div class="flight-info-grid">
+                            <div class="info-item">
+                                <span>Total Distance:</span>
+                                <span id="totalDistance">Calculating...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Estimated Flight Time:</span>
+                                <span id="flightTime">Calculating...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Weather Status:</span>
+                                <span id="weatherStatus">Analyzing...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Route Complexity:</span>
+                                <span id="routeComplexity">Evaluating...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Last Updated:</span>
+                                <span id="lastUpdated">Just now</span>
                             </div>
                         </div>
                     </div>
