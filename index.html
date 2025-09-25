@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pilot Weather Dashboard</title>
+    <title>Pilot Wise Report</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="top-nav">
-        <div class="nav-brand">Pilot Weather</div>
+        <div class="nav-brand">✈️ Pilot Wise Report</div>
         <div class="nav-links">
             <button class="nav-link" id="navPage1">Plan</button>
             <button class="nav-link" id="navPage2">Dashboard</button>
@@ -19,7 +19,7 @@
         <!-- Page 1: ICAO Input -->
         <div id="page1" class="page">
             <div class="page-header">
-                <h1>Flight Weather Planning</h1>
+                <h1>Pilot Wise Report</h1>
                 <p>Enter your flight route waypoints to get comprehensive weather information</p>
             </div>
             
@@ -47,10 +47,17 @@
             <div class="flight-dashboard">
                 <div class="progress-section">
                     <div class="route-title" id="routeTitle">Flight Route</div>
-                    <div class="progress-container">
-                        <div class="progress-bar" id="progressBar"></div>
+                    <div class="map-container">
+                        <div class="flight-map" id="flightMap">
+                            <div class="map-background" id="mapBackground"></div>
+                            <div class="route-line" id="routeLine"></div>
+                            <div class="waypoint-pins" id="waypointPins"></div>
+                            <div class="weather-stops" id="weatherStops"></div>
+                            <div class="flight-progress" id="flightProgress">
+                                <div class="flight-symbol">✈</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="waypoints" id="waypointsList"></div>
                 </div>
                 
                 <div class="dashboard-content">
@@ -102,6 +109,51 @@
                                 Recommended fuel: TBD<br>
                                 Alternate airports: 3<br>
                                 Reserve: Standard
+                            </div>
+                        </div>
+                        
+                        <!-- New Widgets -->
+                        <div class="widget" id="widgetAQI">
+                            <h4>Air Quality Index</h4>
+                            <div class="widget-content">
+                                AQI: <span id="aqiValue">N/A</span>
+                                <div class="metric-badge" id="aqiBadge">Unknown</div>
+                            </div>
+                        </div>
+
+                        <div class="widget" id="widgetVisibility">
+                            <h4>Visibility</h4>
+                            <div class="widget-content">
+                                <span id="visibilityValue">N/A</span>
+                                <div class="metric-badge" id="visibilityBadge">Unknown</div>
+                            </div>
+                        </div>
+
+                        <div class="widget" id="widgetWeatherScore">
+                            <h4>Weather Score</h4>
+                            <div class="widget-content">
+                                <div class="score-ring">
+                                    <span id="weatherScoreValue">--</span>
+                                </div>
+                                <div class="metric-badge" id="weatherScoreBadge">Calculating</div>
+                            </div>
+                        </div>
+
+                        <div class="widget" id="widgetTfr">
+                            <h4>TFR/Restricted Areas</h4>
+                            <div class="widget-content">
+                                <span id="tfrStatus">Checking...</span>
+                                <div class="metric-badge" id="tfrBadge">Unknown</div>
+                            </div>
+                        </div>
+
+                        <div class="widget" id="widgetWind">
+                            <h4>Wind Conditions</h4>
+                            <div class="widget-content">
+                                <div>Direction: <span id="windDirection">N/A</span></div>
+                                <div>Speed: <span id="windSpeed">N/A</span></div>
+                                <div>Gusts: <span id="windGusts">N/A</span></div>
+                                <div class="metric-badge" id="windBadge">Unknown</div>
                             </div>
                         </div>
                     </div>
