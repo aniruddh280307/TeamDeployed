@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pilot Weather Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Page 1: ICAO Input -->
+        <div id="page1" class="page">
+            <div class="page-header">
+                <h1>Flight Weather Planning</h1>
+                <p>Enter your flight route waypoints to get comprehensive weather information</p>
+            </div>
+            
+            <div class="input-section">
+                <form id="routeForm">
+                    <div class="form-group">
+                        <label for="icaoCodes">ICAO Codes (Flight Route)</label>
+                        <input type="text" id="icaoCodes" name="icaoCodes" placeholder="e.g., KJFK,EGLL,LFPG,EDDF" autocomplete="off">
+                        <div class="help-text">Enter ICAO codes separated by commas (minimum 2 waypoints)</div>
+                        <div id="icaoError" class="error-message"></div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">Analyze Weather Route</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Page 2: Route Dashboard -->
+        <div id="page2" class="page" style="display: none;">
+            <div class="page-header">
+                <h1>Flight Route Analysis</h1>
+                <p>Weather conditions and route information</p>
+            </div>
+            
+            <div class="flight-dashboard">
+                <div class="progress-section">
+                    <div class="route-title" id="routeTitle">Flight Route</div>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="waypoints" id="waypointsList"></div>
+                </div>
+                
+                <div class="dashboard-content">
+                    <div class="info-section">
+                        <h3>Flight Information</h3>
+                        <div class="info-item">
+                            <span>Total Distance:</span>
+                            <span id="totalDistance">Calculating...</span>
+                        </div>
+                        <div class="info-item">
+                            <span>Estimated Flight Time:</span>
+                            <span id="flightTime">Calculating...</span>
+                        </div>
+                        <div class="info-item">
+                            <span>Weather Status:</span>
+                            <span id="weatherStatus">Analyzing...</span>
+                        </div>
+                        <div class="info-item">
+                            <span>Route Complexity:</span>
+                            <span id="routeComplexity">Evaluating...</span>
+                        </div>
+                        <div class="info-item">
+                            <span>Last Updated:</span>
+                            <span id="lastUpdated">Just now</span>
+                        </div>
+                    </div>
+                    
+                    <div class="widgets-section">
+                        <div class="widget">
+                            <h4>Current Weather</h4>
+                            <div class="widget-content">
+                                Temperature: 22°C<br>
+                                Wind: 10kt NE<br>
+                                Visibility: 10km
+                            </div>
+                        </div>
+                        
+                        <div class="widget">
+                            <h4>Route Alerts</h4>
+                            <div class="widget-content">
+                                No active weather warnings<br>
+                                Clear conditions expected
+                            </div>
+                        </div>
+                        
+                        <div class="widget">
+                            <h4>Fuel Planning</h4>
+                            <div class="widget-content">
+                                Recommended fuel: TBD<br>
+                                Alternate airports: 3<br>
+                                Reserve: Standard
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page 3: Weather Search -->
+        <div id="page3" class="page" style="display: none;">
+            <div class="page-header">
+                <h1>Weather Reports Search</h1>
+                <p>Search weather reports and access quick references</p>
+            </div>
+            
+            <div class="search-section">
+                <div class="search-container">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchInput" placeholder="Search weather reports, METAR, TAF..." autocomplete="off">
+                    </div>
+                    
+                    <div class="shortcuts-grid">
+                        <div class="shortcut-btn" onclick="searchShortcut('current weather')">
+                            <h4>Current Weather</h4>
+                            <p>Latest METAR reports</p>
+                        </div>
+                        
+                        <div class="shortcut-btn" onclick="searchShortcut('forecast')">
+                            <h4>Weather Forecast</h4>
+                            <p>TAF and extended forecasts</p>
+                        </div>
+                        
+                        <div class="shortcut-btn" onclick="searchShortcut('wind data')">
+                            <h4>Wind Analysis</h4>
+                            <p>Wind patterns and data</p>
+                        </div>
+                        
+                        <div class="shortcut-btn" onclick="searchShortcut('visibility')">
+                            <h4>Visibility Reports</h4>
+                            <p>Visibility and ceiling data</p>
+                        </div>
+                        
+                        <div class="shortcut-btn" onclick="searchShortcut('storm tracking')">
+                            <h4>Storm Tracking</h4>
+                            <p>Severe weather alerts</p>
+                        </div>
+                    </div>
+                    
+                    <div class="results-section">
+                        <h3>Search Results</h3>
+                        <div id="searchResults">
+                            <p style="color: #666; text-align: center; padding: 40px;">
+                                Enter a search term or click a shortcut button to find weather reports
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
