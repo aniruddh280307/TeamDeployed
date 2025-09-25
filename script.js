@@ -112,16 +112,16 @@ function validateICAOCodes(input) {
 
 // Page navigation
 function showPage(pageNumber) {
-    // Hide all pages
     document.querySelectorAll('.page').forEach(page => {
         page.style.display = 'none';
     });
-    
-    // Show selected page
     document.getElementById(`page${pageNumber}`).style.display = 'flex';
-    
-    // Scroll to top
-    window.scrollTo(0, (pageNumber - 1) * window.innerHeight);
+
+    // Update nav active state
+    document.querySelectorAll('.nav-link').forEach(btn => btn.classList.remove('active'));
+    const activeMap = { 1: 'navPage1', 2: 'navPage2', 3: 'navPage3' };
+    const activeBtn = document.getElementById(activeMap[pageNumber]);
+    if (activeBtn) activeBtn.classList.add('active');
 }
 
 // Page 2: Dashboard initialization
@@ -337,24 +337,24 @@ function clearSearchResults() {
     `;
 }
 
-// Smooth scrolling between pages
+// Remove wheel-based navigation and add click-based nav
 let currentPage = 1;
 
-document.addEventListener('wheel', function(e) {
-    e.preventDefault();
-    
-    if (e.deltaY > 0 && currentPage < 3) {
-        // Scroll down
-        currentPage++;
-        showPage(currentPage);
-    } else if (e.deltaY < 0 && currentPage > 1) {
-        // Scroll up
-        currentPage--;
-        showPage(currentPage);
-    }
-}, { passive: false });
+function attachNavHandlers() {
+    const toPage = (n) => {
+        currentPage = n;
+        showPage(n);
+    };
+    const btn1 = document.getElementById('navPage1');
+    const btn2 = document.getElementById('navPage2');
+    const btn3 = document.getElementById('navPage3');
+    if (btn1) btn1.addEventListener('click', () => toPage(1));
+    if (btn2) btn2.addEventListener('click', () => toPage(2));
+    if (btn3) btn3.addEventListener('click', () => toPage(3));
+}
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    attachNavHandlers();
     showPage(1);
 });
