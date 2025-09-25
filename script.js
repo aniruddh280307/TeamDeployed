@@ -1,49 +1,65 @@
 let routeData = [];
 let progressInterval;
 
-// ====== API CONFIGURATION ======
-// ADD YOUR WEATHER API DETAILS HERE
-const WEATHER_API_CONFIG = {
-    apiKey: 'YOUR_API_KEY_HERE',
-    baseUrl: 'YOUR_API_BASE_URL_HERE',
+// ====== AVIATION WEATHER API CONFIGURATION ======
+const AVIATION_API_CONFIG = {
+    baseUrl: 'https://aviationweather.gov/api/data',
     endpoints: {
-        weather: '/weather',
         metar: '/metar',
         taf: '/taf',
-        search: '/search',
-        // ===== Add your additional endpoints here =====
-        aqi: '/aqi', // Replace with actual AQI endpoint when available
-        tfr: '/tfr'  // Replace with actual TFR endpoint when available
+        pirep: '/pirep',
+        sigmet: '/sigmet',
+        afd: '/afd',
+        stationinfo: '/stationinfo',
+        current: '/current',
+        forecast: '/forecast',
+        notam: '/notam',
+        airmet: '/airmet',
+        gairmet: '/gairmet',
+        winds: '/winds',
+        icing: '/icing',
+        turbulence: '/turbulence'
     }
 };
 
-// API Helper Functions
-async function fetchWeatherData(icaoCode) {
-    // REPLACE THIS WITH YOUR ACTUAL API CALL
+// Backend API Configuration
+const BACKEND_API_CONFIG = {
+    baseUrl: 'http://localhost:5000',
+    endpoints: {
+        summary: '/api/aviation/summary',
+        weather: '/api/weather',
+        route: '/api/route',
+        health: '/api/health'
+    }
+};
+
+// Aviation Weather API Helper Functions
+async function fetchAviationData(endpoint, params = {}) {
     try {
-        const response = await fetch(`${WEATHER_API_CONFIG.baseUrl}${WEATHER_API_CONFIG.endpoints.weather}?icao=${icaoCode}&key=${WEATHER_API_CONFIG.apiKey}`);
-        const data = await response.json();
-        return data;
+        const url = `${AVIATION_API_CONFIG.baseUrl}${AVIATION_API_CONFIG.endpoints[endpoint]}`;
+        const queryString = new URLSearchParams(params).toString();
+        const fullUrl = queryString ? `${url}?${queryString}` : url;
+        
+        const response = await fetch(fullUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
     } catch (error) {
-        console.error('Weather API Error:', error);
+        console.error(`${endpoint.toUpperCase()} API Error:`, error);
         return null;
     }
 }
 
-// ===== Optional: AQI Integration Stub =====
-// Replace implementation when AQI API is available
-async function fetchAQIForIcao(icaoCode) {
-    try {
-        // Example target: `${WEATHER_API_CONFIG.baseUrl}${WEATHER_API_CONFIG.endpoints.aqi}?icao=${icaoCode}&key=${WEATHER_API_CONFIG.apiKey}`
-        // const response = await fetch(url);
-        // const data = await response.json();
-        // return data;
-        return null; // placeholder: return null to trigger graceful fallback
-    } catch (error) {
-        console.error('AQI API Error:', error);
-        return null;
-    }
+async function fetchWeatherData(icaoCode) {
+    return await fetchAviationData('metar', { 
+        stations: icaoCode, 
+        format: 'JSON', 
+        hours: 2 
+    });
 }
+
+// Removed AQI integration
 
 // ===== Optional: TFR Integration Stub =====
 // Replace implementation when TFR/Restricted Areas API is available
@@ -61,26 +77,26 @@ async function fetchTfrForRoute(routeIcaos) {
 }
 
 async function fetchMetarData(icaoCode) {
-    // REPLACE THIS WITH YOUR ACTUAL METAR API CALL
-    try {
-        const response = await fetch(`${WEATHER_API_CONFIG.baseUrl}${WEATHER_API_CONFIG.endpoints.metar}?icao=${icaoCode}&key=${WEATHER_API_CONFIG.apiKey}`);
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('METAR API Error:', error);
-        return null;
-    }
+    return await fetchAviationData('metar', { 
+        stations: icaoCode, 
+        format: 'JSON', 
+        hours: 2 
+    });
 }
 
 async function searchWeatherReports(query) {
-    // REPLACE THIS WITH YOUR ACTUAL SEARCH API CALL
+    // Use backend API for comprehensive search
     try {
-        const response = await fetch(`${WEATHER_API_CONFIG.baseUrl}${WEATHER_API_CONFIG.endpoints.search}?q=${encodeURIComponent(query)}&key=${WEATHER_API_CONFIG.apiKey}`);
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.summary}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
         const data = await response.json();
-        return data;
+        return data.summary || [];
     } catch (error) {
         console.error('Search API Error:', error);
-        return null;
+        return [];
     }
 }
 
@@ -232,6 +248,9 @@ function createAnimatedMap() {
     setTimeout(() => {
         flightProgress.style.left = '90%';
     }, 1000);
+    
+    // Load aviation weather summary
+    loadAviationSummary();
 }
 
 // Create professional weather stops with precipitation
@@ -298,6 +317,142 @@ function hideTooltip() {
     }
 }
 
+// Load aviation weather summary from backend
+async function loadAviationSummary() {
+    const summaryPoints = document.getElementById('summaryPoints');
+    
+    try {
+        // Prepare query with route stations
+        const query = {
+            stations: routeData.join(','),
+            metar: { hours: 2 },
+            taf: { hours: 6 },
+            pirep: { hours: 4 },
+            sigmet: { hours: 6 },
+            afd: { hours: 6 }
+        };
+        
+        // Call backend API
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.summary}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(query)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.summary && data.summary.length > 0) {
+            displaySummaryPoints(data.summary);
+        } else {
+            summaryPoints.innerHTML = '<div class="loading">No weather data available for this route</div>';
+        }
+        
+    } catch (error) {
+        console.error('Failed to load aviation summary:', error);
+        summaryPoints.innerHTML = `
+            <div class="loading">
+                Backend unavailable. Using sample data...
+                <br><small>Start the Flask server: python python.py</small>
+            </div>
+        `;
+        
+        // Fallback: Show sample aviation points
+        setTimeout(() => {
+            displaySummaryPoints([
+                "SIGMET: Convective activity over KJFK area - Severe turbulence and icing possible",
+                "PIREP: Moderate to severe turbulence reported at FL350 - Expect rough ride",
+                "METAR: KJFK visibility 2SM with thunderstorms - Monitor closely",
+                "TAF: KLAX deteriorating conditions expected 18Z - Plan fuel reserves",
+                "AFD: High pressure system moving east - Generally favorable conditions",
+                "NOTAM: KORD Runway 10L/28R closed for maintenance - Expect delays"
+            ]);
+        }, 2000);
+    }
+}
+
+// Display summary points with simple bullet points and red priority indicators
+function displaySummaryPoints(points) {
+    const summaryPoints = document.getElementById('summaryPoints');
+    summaryPoints.innerHTML = '';
+    
+    points.forEach((point, index) => {
+        const pointElement = document.createElement('div');
+        pointElement.className = 'summary-bullet';
+        
+        // Determine priority based on content
+        let priority = 'low';
+        let priorityDot = '🟢';
+        
+        if (point.includes('SIGMET') || point.includes('severe') || point.includes('thunderstorm') || point.includes('hazardous')) {
+            priority = 'high';
+            priorityDot = '🔴';
+        } else if (point.includes('PIREP') || point.includes('turbulence') || point.includes('icing') || point.includes('moderate')) {
+            priority = 'medium';
+            priorityDot = '🟡';
+        }
+        
+        pointElement.classList.add(priority);
+        pointElement.innerHTML = `
+            <div class="bullet-content">
+                <span class="priority-dot">${priorityDot}</span>
+                <span class="bullet-text">${point}</span>
+            </div>
+        `;
+        
+        summaryPoints.appendChild(pointElement);
+    });
+}
+
+// Get visibility from METAR/TAF data
+async function getVisibilityFromMetarTaf(icaoCode) {
+    try {
+        // Try METAR first (current conditions)
+        const metarData = await fetchAviationData('metar', { 
+            stations: icaoCode, 
+            format: 'JSON', 
+            hours: 2 
+        });
+        
+        if (metarData && Array.isArray(metarData) && metarData.length > 0) {
+            const metar = metarData[0];
+            if (metar.visibility) {
+                return normalizeVisibility(metar.visibility);
+            }
+        }
+        
+        // Fallback to TAF (forecast)
+        const tafData = await fetchAviationData('taf', { 
+            stations: icaoCode, 
+            format: 'JSON', 
+            hours: 6 
+        });
+        
+        if (tafData && Array.isArray(tafData) && tafData.length > 0) {
+            const taf = tafData[0];
+            if (taf.forecast && taf.forecast.length > 0) {
+                const firstForecast = taf.forecast[0];
+                if (firstForecast.visibility) {
+                    return normalizeVisibility(firstForecast.visibility);
+                }
+            }
+        }
+        
+        return { display: 'N/A', km: null, badge: 'unknown' };
+        
+    } catch (error) {
+        console.error('Visibility fetch error:', error);
+        return { display: 'N/A', km: null, badge: 'unknown' };
+    }
+}
+
+// Removed formatSummaryPoint function - now using simple bullet points
+
 // ====== ADD YOUR WEATHER DATA LOADING HERE ======
 async function loadRouteWeatherData() {
     try {
@@ -306,14 +461,13 @@ async function loadRouteWeatherData() {
         const weatherData = await Promise.all(weatherPromises);
 
         // Optional parallel stubs for later integration
-        const [aqiDataFirst, tfrData] = await Promise.all([
-            routeData[0] ? fetchAQIForIcao(routeData[0]) : Promise.resolve(null),
+        const [tfrData] = await Promise.all([
             routeData && routeData.length ? fetchTfrForRoute(routeData) : Promise.resolve(null)
         ]);
         
         // Process weather data and update widgets
         updateWeatherWidgets(weatherData);
-        updateAdditionalWidgets(weatherData, { aqiDataFirst, tfrData });
+        updateAdditionalWidgets(weatherData, { tfrData });
         
         // Update route analysis
         analyzeRouteConditions(weatherData);
@@ -338,17 +492,6 @@ function updateWeatherWidgets(weatherDataArray) {
             Visibility: ${currentWeather.visibility || 'N/A'}
         `;
     }
-    
-    // Route Alerts Widget (Second widget)
-    const alerts = analyzeWeatherAlerts(weatherDataArray);
-    widgets[1].querySelector('.widget-content').innerHTML = alerts;
-    
-    // Fuel Planning Widget (Third widget) - can integrate fuel calculation API here
-    widgets[2].querySelector('.widget-content').innerHTML = `
-        Recommended fuel: ${calculateFuelRequirement()}<br>
-        Alternate airports: ${findAlternateAirports()}<br>
-        Reserve: Standard
-    `;
 }
 
 function updateWeatherWidgetsError() {
@@ -360,17 +503,13 @@ function updateWeatherWidgetsError() {
 }
 
 // ===== Additional Widgets Logic =====
-function updateAdditionalWidgets(weatherDataArray, extras = {}) {
+async function updateAdditionalWidgets(weatherDataArray, extras = {}) {
     const first = weatherDataArray && weatherDataArray[0] ? weatherDataArray[0] : {};
 
-    // AQI
-    const rawAqi = extras.aqiDataFirst?.aqi ?? first.aqi;
-    const aqi = normalizeAQI(rawAqi);
-    setText('aqiValue', aqi.value !== null ? aqi.value : 'N/A');
-    setBadge('aqiBadge', aqi.category);
+    // Removed AQI widget
 
-    // Visibility
-    const visibility = normalizeVisibility(first.visibility);
+    // Visibility from METAR/TAF data
+    const visibility = await getVisibilityFromMetarTaf(routeData[0]);
     setText('visibilityValue', visibility.display);
     setBadge('visibilityBadge', visibility.badge);
 
@@ -378,7 +517,7 @@ function updateAdditionalWidgets(weatherDataArray, extras = {}) {
     const score = computeWeatherScore({
         windKts: extractWindSpeedKts(first.wind),
         visKm: visibility.km,
-        aqi: aqi.value
+        aqi: null // Removed AQI from score calculation
     });
     setRingPercent('weatherScoreValue', 'weatherScoreBadge', score);
 
@@ -433,19 +572,29 @@ function normalizeAQI(raw) {
 }
 
 function normalizeVisibility(raw) {
-    // Accept km number, meters, or string like '10km'/'6SM'
+    // Parse METAR visibility data
     if (raw == null) return { display: 'N/A', km: null, badge: 'unknown' };
     let km = null;
+    
     if (typeof raw === 'number') {
         km = raw > 100 ? raw / 1000 : raw; // if meters, convert
     } else if (typeof raw === 'string') {
-        const smMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*SM/i);
-        const kmMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*km/i);
-        const mMatch = raw.match(/([0-9]+)\s*m(?![a-z])/i);
-        if (smMatch) km = parseFloat(smMatch[1]) * 1.60934;
-        else if (kmMatch) km = parseFloat(kmMatch[1]);
-        else if (mMatch) km = parseInt(mMatch[1], 10) / 1000;
+        // METAR format: "10SM", "6SM", "9999" (meters), "1/2SM"
+        const smMatch = raw.match(/([0-9]+(?:\/[0-9]+)?)\s*SM/i);
+        const meterMatch = raw.match(/^([0-9]+)$/);
+        const fractionMatch = raw.match(/([0-9]+)\/([0-9]+)\s*SM/i);
+        
+        if (fractionMatch) {
+            const numerator = parseInt(fractionMatch[1]);
+            const denominator = parseInt(fractionMatch[2]);
+            km = (numerator / denominator) * 1.60934;
+        } else if (smMatch) {
+            km = parseFloat(smMatch[1]) * 1.60934;
+        } else if (meterMatch) {
+            km = parseInt(meterMatch[1], 10) / 1000;
+        }
     }
+    
     const display = km == null ? 'N/A' : `${km.toFixed(1)} km`;
     const badge = km == null ? 'unknown' : km >= 8 ? 'good' : km >= 5 ? 'moderate' : 'poor';
     return { display, km, badge };
@@ -489,7 +638,7 @@ function extractWindSpeedKts(raw) {
 }
 
 function computeWeatherScore({ windKts, visKm, aqi }) {
-    // 0-100 simple composite: weights wind 40, visibility 40, AQI 20
+    // 0-100 simple composite: weights wind 50, visibility 50 (removed AQI)
     let windScore = 100;
     if (windKts != null) {
         if (windKts <= 10) windScore = 100;
@@ -498,27 +647,12 @@ function computeWeatherScore({ windKts, visKm, aqi }) {
         else windScore = 20;
     }
     let visScore = visKm == null ? 60 : visKm >= 8 ? 100 : visKm >= 5 ? 70 : 30;
-    let aqiScore = aqi == null ? 60 : aqi <= 50 ? 100 : aqi <= 100 ? 70 : 30;
-    const percent = 0.4 * windScore + 0.4 * visScore + 0.2 * aqiScore;
+    const percent = 0.5 * windScore + 0.5 * visScore;
     const badge = percent >= 80 ? 'good' : percent >= 60 ? 'moderate' : 'poor';
     return { percent, badge };
 }
 
-function analyzeWeatherAlerts(weatherData) {
-    // ANALYZE WEATHER DATA AND RETURN ALERTS
-    // Replace with your logic based on API response structure
-    return "No active weather warnings<br>Clear conditions expected";
-}
-
-function calculateFuelRequirement() {
-    // ADD FUEL CALCULATION LOGIC OR API CALL HERE
-    return "TBD";
-}
-
-function findAlternateAirports() {
-    // ADD ALTERNATE AIRPORT FINDING LOGIC OR API CALL HERE  
-    return "3";
-}
+// Removed route alerts and fuel planning functions
 
 function analyzeRouteConditions(weatherData) {
     // ANALYZE OVERALL ROUTE CONDITIONS HERE
@@ -565,18 +699,17 @@ function searchShortcut(query) {
     performSearch(query);
 }
 
-// ====== REPLACE WITH REAL SEARCH API ======
+// ====== REAL SEARCH USING AVIATION APIS ======
 async function performSearch(query) {
     const resultsContainer = document.getElementById('searchResults');
     
     // Show loading state
-    resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Searching...</p>';
+    resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Searching aviation weather data...</p>';
     
     try {
-        // CALL YOUR REAL SEARCH API HERE
-        const searchResults = await searchWeatherReports(query);
+        // Search across multiple aviation APIs
+        const searchResults = await searchAviationData(query);
         
-        // REPLACE THE MOCK RESULTS BELOW WITH YOUR API DATA
         if (searchResults && searchResults.length > 0) {
             resultsContainer.innerHTML = '';
             
@@ -586,43 +719,123 @@ async function performSearch(query) {
                 resultElement.innerHTML = `
                     <h4>${result.title}</h4>
                     <p>${result.description}</p>
+                    <div class="result-meta">
+                        <span class="result-source">${result.source}</span>
+                        <span class="result-time">${result.time}</span>
+                    </div>
                 `;
                 resultsContainer.appendChild(resultElement);
             });
         } else {
-            resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">No results found</p>';
+            resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">No aviation weather data found for your search</p>';
         }
         
     } catch (error) {
         console.error('Search failed:', error);
-        
-        // FALLBACK: Show simulated results (REMOVE THIS WHEN YOU ADD REAL API)
-        const mockResults = [
-            {
-                title: `METAR Report - ${query}`,
-                description: `Current weather conditions related to ${query}. Visibility 10SM, wind calm, temperature 22°C.`
-            },
-            {
-                title: `TAF Forecast - ${query}`,
-                description: `Terminal aerodrome forecast showing ${query} conditions for the next 24 hours.`
-            },
-            {
-                title: `Weather Analysis - ${query}`,
-                description: `Detailed meteorological analysis focusing on ${query} patterns and trends.`
-            }
-        ];
-        
-        resultsContainer.innerHTML = '';
-        
-        mockResults.forEach(result => {
-            const resultElement = document.createElement('div');
-            resultElement.className = 'result-item';
-            resultElement.innerHTML = `
-                <h4>${result.title}</h4>
-                <p>${result.description}</p>
-            `;
-            resultsContainer.appendChild(resultElement);
+        resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Search unavailable. Please try again later.</p>';
+    }
+}
+
+// Search across all aviation APIs
+async function searchAviationData(query) {
+    const results = [];
+    
+    try {
+        // Search METAR data
+        const metarData = await fetchAviationData('metar', { 
+            format: 'JSON', 
+            hours: 6 
         });
+        if (metarData && Array.isArray(metarData)) {
+            metarData.forEach(metar => {
+                if (metar.rawOb && metar.rawOb.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({
+                        title: `METAR - ${metar.stationId}`,
+                        description: metar.rawOb,
+                        source: 'METAR',
+                        time: new Date(metar.obsTime).toLocaleString()
+                    });
+                }
+            });
+        }
+        
+        // Search TAF data
+        const tafData = await fetchAviationData('taf', { 
+            format: 'JSON', 
+            hours: 12 
+        });
+        if (tafData && Array.isArray(tafData)) {
+            tafData.forEach(taf => {
+                if (taf.rawTAF && taf.rawTAF.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({
+                        title: `TAF - ${taf.stationId}`,
+                        description: taf.rawTAF,
+                        source: 'TAF',
+                        time: new Date(taf.issueTime).toLocaleString()
+                    });
+                }
+            });
+        }
+        
+        // Search PIREP data
+        const pirepData = await fetchAviationData('pirep', { 
+            format: 'JSON', 
+            hours: 6 
+        });
+        if (pirepData && Array.isArray(pirepData)) {
+            pirepData.forEach(pirep => {
+                if (pirep.rawPirep && pirep.rawPirep.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({
+                        title: `PIREP - ${pirep.aircraftRef}`,
+                        description: pirep.rawPirep,
+                        source: 'PIREP',
+                        time: new Date(pirep.obsTime).toLocaleString()
+                    });
+                }
+            });
+        }
+        
+        // Search SIGMET data
+        const sigmetData = await fetchAviationData('sigmet', { 
+            format: 'JSON', 
+            hours: 6 
+        });
+        if (sigmetData && Array.isArray(sigmetData)) {
+            sigmetData.forEach(sigmet => {
+                if (sigmet.rawSigmet && sigmet.rawSigmet.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({
+                        title: `SIGMET - ${sigmet.hazard}`,
+                        description: sigmet.rawSigmet,
+                        source: 'SIGMET',
+                        time: new Date(sigmet.validTime).toLocaleString()
+                    });
+                }
+            });
+        }
+        
+        // Search NOTAM data
+        const notamData = await fetchAviationData('notam', { 
+            format: 'JSON', 
+            hours: 24 
+        });
+        if (notamData && Array.isArray(notamData)) {
+            notamData.forEach(notam => {
+                if (notam.rawNotam && notam.rawNotam.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({
+                        title: `NOTAM - ${notam.icaoId}`,
+                        description: notam.rawNotam,
+                        source: 'NOTAM',
+                        time: new Date(notam.issueTime).toLocaleString()
+                    });
+                }
+            });
+        }
+        
+        return results.slice(0, 10); // Limit to 10 results
+        
+    } catch (error) {
+        console.error('Aviation search error:', error);
+        return [];
     }
 }
 
