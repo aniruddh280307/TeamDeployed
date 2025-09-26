@@ -3,15 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pilot Weather Dashboard</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Pilot Wise Report</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="top-nav">
+        <div class="nav-brand">✈️ Pilot Wise Report</div>
+        <div class="nav-links">
+            <button class="nav-link" id="navPage1">Plan</button>
+            <button class="nav-link" id="navPage2">Dashboard</button>
+            <button class="nav-link" id="navPage3">Search</button>
+        </div>
+    </div>
     <div class="container">
         <!-- Page 1: ICAO Input -->
         <div id="page1" class="page">
             <div class="page-header">
-                <h1>Flight Weather Planning</h1>
+                <h1>Pilot Wise Report</h1>
                 <p>Enter your flight route waypoints to get comprehensive weather information</p>
             </div>
             
@@ -39,39 +47,29 @@
             <div class="flight-dashboard">
                 <div class="progress-section">
                     <div class="route-title" id="routeTitle">Flight Route</div>
-                    <div class="progress-container">
-                        <div class="progress-bar" id="progressBar"></div>
-                    </div>
-                    <div class="waypoints" id="waypointsList"></div>
-                </div>
-                
-                <div class="dashboard-content">
-                    <div class="info-section">
-                        <h3>Flight Information</h3>
-                        <div class="info-item">
-                            <span>Total Distance:</span>
-                            <span id="totalDistance">Calculating...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Estimated Flight Time:</span>
-                            <span id="flightTime">Calculating...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Weather Status:</span>
-                            <span id="weatherStatus">Analyzing...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Route Complexity:</span>
-                            <span id="routeComplexity">Evaluating...</span>
-                        </div>
-                        <div class="info-item">
-                            <span>Last Updated:</span>
-                            <span id="lastUpdated">Just now</span>
+                    <div class="map-container">
+                        <div class="flight-map" id="flightMap">
+                            <div class="map-background" id="mapBackground"></div>
+                            <div class="route-line" id="routeLine"></div>
+                            <div class="waypoint-pins" id="waypointPins"></div>
+                            <div class="weather-stops" id="weatherStops"></div>
+                            <div class="flight-progress" id="flightProgress">
+                                <div class="flight-symbol">✈</div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="widgets-section">
-                        <div class="widget">
+                    <!-- Aviation Weather Summary -->
+                    <div class="aviation-summary">
+                        <h3>Weather Briefing Summary</h3>
+                        <div class="summary-points" id="summaryPoints">
+                            <div class="loading">Analyzing weather data...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Horizontal Widgets Row -->
+                    <div class="horizontal-widgets">
+                        <div class="widget" id="widgetCurrentWeather">
                             <h4>Current Weather</h4>
                             <div class="widget-content">
                                 Temperature: 22°C<br>
@@ -79,21 +77,67 @@
                                 Visibility: 10km
                             </div>
                         </div>
-                        
-                        <div class="widget">
-                            <h4>Route Alerts</h4>
+
+                        <div class="widget" id="widgetVisibility">
+                            <h4>Visibility</h4>
                             <div class="widget-content">
-                                No active weather warnings<br>
-                                Clear conditions expected
+                                <span id="visibilityValue">N/A</span>
+                                <div class="metric-badge" id="visibilityBadge">Unknown</div>
                             </div>
                         </div>
-                        
-                        <div class="widget">
-                            <h4>Fuel Planning</h4>
+
+                        <div class="widget" id="widgetWeatherScore">
+                            <h4>Weather Score</h4>
                             <div class="widget-content">
-                                Recommended fuel: TBD<br>
-                                Alternate airports: 3<br>
-                                Reserve: Standard
+                                <div class="score-ring">
+                                    <span id="weatherScoreValue">--</span>
+                                </div>
+                                <div class="metric-badge" id="weatherScoreBadge">Calculating</div>
+                            </div>
+                        </div>
+
+                        <div class="widget" id="widgetTfr">
+                            <h4>TFR/Restricted Areas</h4>
+                            <div class="widget-content">
+                                <span id="tfrStatus">Checking...</span>
+                                <div class="metric-badge" id="tfrBadge">Unknown</div>
+                            </div>
+                        </div>
+
+                        <div class="widget" id="widgetWind">
+                            <h4>Wind Conditions</h4>
+                            <div class="widget-content">
+                                <div>Direction: <span id="windDirection">N/A</span></div>
+                                <div>Speed: <span id="windSpeed">N/A</span></div>
+                                <div>Gusts: <span id="windGusts">N/A</span></div>
+                                <div class="metric-badge" id="windBadge">Unknown</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Flight Information -->
+                    <div class="flight-info-section">
+                        <h3>Flight Information</h3>
+                        <div class="flight-info-grid">
+                            <div class="info-item">
+                                <span>Total Distance:</span>
+                                <span id="totalDistance">Calculating...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Estimated Flight Time:</span>
+                                <span id="flightTime">Calculating...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Weather Status:</span>
+                                <span id="weatherStatus">Analyzing...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Route Complexity:</span>
+                                <span id="routeComplexity">Evaluating...</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Last Updated:</span>
+                                <span id="lastUpdated">Just now</span>
                             </div>
                         </div>
                     </div>
