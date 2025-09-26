@@ -2426,8 +2426,20 @@ async function performSearch(query) {
     resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Searching aviation weather data...</p>';
     
     try {
-        // Use backend search API for comprehensive results
-        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}/search?query=${encodeURIComponent(query)}`);
+        // Build URL with route stations if available
+        let searchUrl = `${BACKEND_API_CONFIG.baseUrl}/search/focused?query=${encodeURIComponent(query)}`;
+        
+        // Add route stations if they exist (from Page 1)
+        if (routeData && routeData.length > 0) {
+            const stationsParam = routeData.join(',');
+            searchUrl += `&stations=${encodeURIComponent(stationsParam)}`;
+            console.log(`🎯 Searching with route stations: ${stationsParam}`);
+        } else {
+            console.log(`🎯 No route stations found, using default airports`);
+        }
+        
+        // Use focused search API for targeted results
+        const response = await fetch(searchUrl);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -2438,37 +2450,36 @@ async function performSearch(query) {
         if (searchData.results && searchData.results.length > 0) {
             resultsContainer.innerHTML = '';
             
-            // Display search results with enhanced formatting
+            // Display focused search results
             searchData.results.forEach(result => {
                 const resultElement = document.createElement('div');
-                resultElement.className = 'result-item';
+                resultElement.className = 'result-item focused-result';
                 
-                // Enhanced result display with decoded METAR and raw data
+                // Create focused display showing only the requested parameter
                 let resultHTML = `
                     <div class="result-header">
-                        <h4>${result.title}</h4>
-                        <span class="result-type-badge ${result.type.toLowerCase()}">${result.type}</span>
+                        <h4>${result.stationName} (${result.station})</h4>
+                        <span class="result-type-badge focused">Focused</span>
                     </div>
                     <div class="result-content">
-                        <div class="decoded-metar">
-                            <h5>📋 Decoded METAR Report</h5>
-                            <pre class="metar-decoded-content">${result.content}</pre>
-                        </div>
+                        <div class="focused-data">
                 `;
                 
-                // Add raw METAR data if available
-                if (result.rawMetar) {
+                // Display only the requested parameters
+                Object.entries(result.data).forEach(([key, value]) => {
+                    const label = key.charAt(0).toUpperCase() + key.slice(1);
                     resultHTML += `
-                        <div class="raw-metar">
-                            <h5>📄 Raw METAR Data</h5>
-                            <pre class="metar-raw-content">${result.rawMetar}</pre>
+                        <div class="parameter-item">
+                            <span class="parameter-label">${label}:</span>
+                            <span class="parameter-value">${value}</span>
                         </div>
                     `;
-                }
+                });
                 
                 resultHTML += `
+                        </div>
                         <div class="result-meta">
-                            <span class="result-source">${result.type}</span>
+                            <span class="result-source">Focused Search</span>
                             <span class="result-time">${new Date(result.timestamp * 1000).toLocaleString()}</span>
                         </div>
                     </div>
@@ -2481,9 +2492,16 @@ async function performSearch(query) {
             // Add search summary
             const summaryElement = document.createElement('div');
             summaryElement.className = 'search-summary';
-            summaryElement.innerHTML = `
-                <p>Found ${searchData.results.length} result(s) for "${query}"</p>
-            `;
+            
+            let summaryText = `Found ${searchData.results.length} latest report(s) for "${query}"`;
+            if (searchData.stations && searchData.stations.length > 0) {
+                summaryText += ` from your route stations (${searchData.stations.join(', ')})`;
+            } else {
+                summaryText += ` from major airports`;
+            }
+            summaryText += `<br><small>Showing most recent data per station</small>`;
+            
+            summaryElement.innerHTML = `<p>${summaryText}</p>`;
             resultsContainer.insertBefore(summaryElement, resultsContainer.firstChild);
             
         } else {

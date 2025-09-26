@@ -730,6 +730,37 @@ app.get('/search', async (req, res) => {
   }
 });
 
+// Focused search endpoint with AI filtering
+app.get('/search/focused', async (req, res) => {
+  try {
+    const { query, stations } = req.query;
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ error: 'Query parameter is required and must be at least 2 characters' });
+    }
+
+    console.log(`🎯 Focused search for: "${query}"`);
+    console.log(`🎯 Raw query params:`, req.query);
+    console.log(`🎯 Stations parameter:`, stations);
+
+    // Parse route stations if provided
+    let routeStations = null;
+    if (stations && stations.trim()) {
+      routeStations = stations.split(',').map(s => s.trim().toUpperCase());
+      console.log(`🎯 Route stations provided: ${routeStations.join(', ')}`);
+    } else {
+      console.log(`🎯 No route stations provided, using default airports`);
+    }
+
+    // Focused search with AI filtering
+    const searchResults = await performFocusedSearch(query, routeStations);
+
+    res.json(searchResults);
+  } catch (error) {
+    console.error('Focused search error:', error);
+    res.status(500).json({ error: 'Focused search failed', details: error.message });
+  }
+});
+
 // Debug endpoint to test METAR data retrieval
 app.get('/debug/metar', async (req, res) => {
   try {
@@ -1111,6 +1142,176 @@ async function searchComprehensive(query) {
   }
 
   return results;
+}
+
+// Focused search with AI filtering
+async function performFocusedSearch(query, routeStations = null) {
+  try {
+    console.log(`🎯 Performing focused search for: "${query}"`);
+    
+    // Step 1: Determine which stations to search
+    let stationsToSearch = [];
+    
+    if (routeStations && routeStations.length > 0) {
+      // Use stations from the user's route (Page 1)
+      stationsToSearch = routeStations;
+      console.log(`🎯 Using route stations: ${stationsToSearch.join(', ')}`);
+    } else {
+      // Fallback to major airports if no route stations provided
+      stationsToSearch = ['KJFK', 'KLAX', 'KORD', 'KDFW', 'KATL', 'KLAS', 'KPHX', 'KMIA', 'KSEA', 'KBOS'];
+      console.log(`🎯 Using default major airports: ${stationsToSearch.join(', ')}`);
+    }
+    
+    const allMetarData = [];
+    
+    // Fetch METAR data from specified stations
+    for (const airport of stationsToSearch) {
+      try {
+        const metarData = await aviationAPI.getMETAR(airport, 6);
+        if (metarData && Array.isArray(metarData)) {
+          allMetarData.push(...metarData);
+        }
+      } catch (error) {
+        console.log(`Error fetching METAR for ${airport}:`, error.message);
+      }
+    }
+    
+    console.log(`📊 Fetched ${allMetarData.length} METAR records from ${stationsToSearch.length} stations`);
+    
+    // Step 2: Decode raw data into human-readable format
+    const decodedData = allMetarData.map(metar => ({
+      ...metar,
+      decoded: decodeMetarForFocusedSearch(metar)
+    }));
+    
+    // Step 3: AI filtering to extract ONLY requested parameter
+    const filteredResults = await filterByParameter(decodedData, query);
+    
+    console.log(`🎯 Focused search results: ${filteredResults.length} latest reports from ${filteredResults.length} stations`);
+    
+    return {
+      query,
+      results: filteredResults,
+      count: filteredResults.length,
+      stations: stationsToSearch,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    console.error('Focused search error:', error);
+    return {
+      query,
+      results: [],
+      count: 0,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Decode METAR for focused search (simplified version)
+function decodeMetarForFocusedSearch(metarData) {
+  try {
+    const stationId = metarData.icaoId || 'Unknown';
+    const stationName = metarData.name || 'Unknown Airport';
+    
+    // Calculate humidity from temperature and dew point
+    let humidity = null;
+    if (metarData.temp !== null && metarData.dewp !== null) {
+      const tempC = metarData.temp;
+      const dewpC = metarData.dewp;
+      // Simplified humidity calculation (approximate)
+      humidity = Math.round(100 * Math.exp((17.625 * dewpC) / (243.04 + dewpC)) / Math.exp((17.625 * tempC) / (243.04 + tempC)));
+    }
+    
+    return {
+      station: stationId,
+      stationName: stationName,
+      temperature: metarData.temp !== null ? `${metarData.temp}°C` : null,
+      dewPoint: metarData.dewp !== null ? `${metarData.dewp}°C` : null,
+      humidity: humidity !== null ? `${humidity}%` : null,
+      wind: metarData.wdir !== null && metarData.wspd !== null ? 
+        `${metarData.wdir}° at ${metarData.wspd} kts` : null,
+      visibility: metarData.visib || null,
+      pressure: metarData.altim !== null ? `${metarData.altim} hPa` : null,
+      weather: metarData.wxString || null,
+      flightCategory: metarData.fltCat || null
+    };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+// AI filtering to extract only requested parameter
+async function filterByParameter(decodedData, query) {
+  const queryLower = query.toLowerCase();
+  const stationMap = new Map(); // To track latest report per station
+  
+  // Parameter mapping
+  const parameterMap = {
+    'humidity': ['humidity'],
+    'temperature': ['temperature'],
+    'temp': ['temperature'],
+    'wind': ['wind'],
+    'visibility': ['visibility'],
+    'vis': ['visibility'],
+    'pressure': ['pressure'],
+    'weather': ['weather'],
+    'conditions': ['weather'],
+    'flight': ['flightCategory'],
+    'category': ['flightCategory']
+  };
+  
+  // Find matching parameters
+  let targetParameters = [];
+  for (const [key, params] of Object.entries(parameterMap)) {
+    if (queryLower.includes(key)) {
+      targetParameters = [...targetParameters, ...params];
+    }
+  }
+  
+  // If no specific parameters found, try to match any parameter
+  if (targetParameters.length === 0) {
+    targetParameters = ['humidity', 'temperature', 'wind', 'visibility', 'pressure', 'weather', 'flightCategory'];
+  }
+  
+  console.log(`🎯 Filtering for parameters: ${targetParameters.join(', ')}`);
+  
+  // Filter and extract only the requested parameters
+  decodedData.forEach(metar => {
+    const extractedData = {};
+    let hasRelevantData = false;
+    
+    targetParameters.forEach(param => {
+      if (metar.decoded[param] !== null && metar.decoded[param] !== undefined) {
+        extractedData[param] = metar.decoded[param];
+        hasRelevantData = true;
+      }
+    });
+    
+    if (hasRelevantData) {
+      const stationId = metar.decoded.station;
+      const currentTimestamp = metar.obsTime || Date.now() / 1000;
+      
+      // Check if this is the latest report for this station
+      if (!stationMap.has(stationId) || currentTimestamp > stationMap.get(stationId).timestamp) {
+        stationMap.set(stationId, {
+          station: metar.decoded.station,
+          stationName: metar.decoded.stationName,
+          data: extractedData,
+          rawMetar: metar.rawOb || 'No raw METAR available',
+          timestamp: currentTimestamp
+        });
+      }
+    }
+  });
+  
+  // Convert map to array and sort by timestamp (newest first)
+  const latestResults = Array.from(stationMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+  
+  console.log(`🎯 Latest reports per station: ${latestResults.length} stations`);
+  
+  return latestResults;
 }
 
 // Enhanced METAR decoder for search results
