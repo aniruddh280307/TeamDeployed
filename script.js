@@ -24,12 +24,15 @@ const AVIATION_API_CONFIG = {
 
 // Backend API Configuration
 const BACKEND_API_CONFIG = {
-    baseUrl: 'http://localhost:5000',
+    baseUrl: 'http://localhost:3001',
     endpoints: {
-        summary: '/api/aviation/summary',
-        weather: '/api/weather',
-        route: '/api/route',
-        health: '/api/health'
+        summary: '/aviation/summary',
+        weather: '/weather',
+        route: '/route',
+        health: '/health',
+        stationinfo: '/data/stationinfo',
+        routeStations: '/route/stations',
+        metarDecoded: '/data/metar'
     }
 };
 
@@ -42,6 +45,11 @@ async function fetchAviationData(endpoint, params = {}) {
         
         const response = await fetch(fullUrl);
         if (!response.ok) {
+            // Handle specific error cases
+            if (response.status === 400) {
+                console.warn(`${endpoint.toUpperCase()} API: Bad Request - Invalid parameters:`, params);
+                return null; // Return null for bad requests instead of throwing
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         return await response.json();
@@ -53,8 +61,8 @@ async function fetchAviationData(endpoint, params = {}) {
 
 async function fetchWeatherData(icaoCode) {
     return await fetchAviationData('metar', { 
-        stations: icaoCode, 
-        format: 'JSON', 
+        ids: icaoCode, 
+        format: 'json', 
         hours: 2 
     });
 }
@@ -78,8 +86,8 @@ async function fetchTfrForRoute(routeIcaos) {
 
 async function fetchMetarData(icaoCode) {
     return await fetchAviationData('metar', { 
-        stations: icaoCode, 
-        format: 'JSON', 
+        ids: icaoCode, 
+        format: 'json', 
         hours: 2 
     });
 }
@@ -97,6 +105,47 @@ async function searchWeatherReports(query) {
     } catch (error) {
         console.error('Search API Error:', error);
         return [];
+    }
+}
+
+// Station Information API Functions
+async function fetchStationInfo(icaoCode) {
+    try {
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.stationinfo}?station=${icaoCode}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Station Info API Error for ${icaoCode}:`, error);
+        return null;
+    }
+}
+
+async function fetchRouteStations(routeIcaos) {
+    try {
+        const routeString = routeIcaos.join(',');
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.routeStations}/${routeString}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Route Stations API Error:', error);
+        return null;
+    }
+}
+
+async function fetchDecodedMetar(stationCode) {
+    try {
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.metarDecoded}?station=${stationCode}&hours=1`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Decoded METAR API Error for ${stationCode}:`, error);
+        return null;
     }
 }
 
@@ -192,39 +241,53 @@ async function initializeDashboard() {
     initializeWeatherWallpaper();
 }
 
-// Create professional animated map visualization
-function createAnimatedMap() {
+// Create professional animated map visualization with real station data
+async function createAnimatedMap() {
     const mapContainer = document.getElementById('flightMap');
     const waypointPins = document.getElementById('waypointPins');
     const weatherStops = document.getElementById('weatherStops');
+    
+    // Fetch real station information for the route
+    const stationData = await fetchRouteStations(routeData);
+    console.log('Station data:', stationData);
     const flightProgress = document.getElementById('flightProgress');
     
     // Clear existing content
     waypointPins.innerHTML = '';
     weatherStops.innerHTML = '';
     
-    // Airport database for names
-    const airportDatabase = {
-        'KJFK': { name: 'John F. Kennedy Intl', city: 'New York' },
-        'EGLL': { name: 'Heathrow Airport', city: 'London' },
-        'LFPG': { name: 'Charles de Gaulle', city: 'Paris' },
-        'EDDF': { name: 'Frankfurt Airport', city: 'Frankfurt' },
-        'KLAX': { name: 'Los Angeles Intl', city: 'Los Angeles' },
-        'EHAM': { name: 'Amsterdam Schiphol', city: 'Amsterdam' },
-        'KORD': { name: 'O\'Hare International', city: 'Chicago' },
-        'KDFW': { name: 'Dallas/Fort Worth', city: 'Dallas' },
-        'KATL': { name: 'Hartsfield-Jackson', city: 'Atlanta' },
-        'KSEA': { name: 'Seattle-Tacoma Intl', city: 'Seattle' }
-    };
-    
-    // Create professional pushpin waypoints with 📍
+    // Create professional pushpin waypoints with real station data
     routeData.forEach((waypoint, index) => {
         // Position pins along the route
         const leftPercent = 10 + (index * 80 / (routeData.length - 1));
         
-        // Add airport data attributes
-        const airportInfo = airportDatabase[waypoint] || { name: waypoint, city: 'Unknown' };
-        const fullName = `${airportInfo.name} - ${airportInfo.city}`;
+        // Get real station information
+        let stationInfo = null;
+        let fullName = waypoint;
+        let city = 'Unknown';
+        let country = '';
+        let elevation = '';
+        
+        if (stationData && stationData.stations && stationData.stations[waypoint]) {
+            stationInfo = stationData.stations[waypoint];
+            
+            // Extract station information from API response
+            if (Array.isArray(stationInfo) && stationInfo.length > 0) {
+                const station = stationInfo[0];
+                fullName = station.name || waypoint;
+                city = station.city || 'Unknown';
+                country = station.country || '';
+                elevation = station.elevation ? `${station.elevation}ft` : '';
+            } else if (stationInfo.name) {
+                fullName = stationInfo.name;
+                city = stationInfo.city || 'Unknown';
+                country = stationInfo.country || '';
+                elevation = stationInfo.elevation ? `${stationInfo.elevation}ft` : '';
+            }
+        }
+        
+        // Create display name with real data
+        const displayName = `${fullName}${city !== 'Unknown' ? ` - ${city}` : ''}${country ? `, ${country}` : ''}`;
         
         // Determine pin type
         let pinType = 'waypoint';
@@ -234,8 +297,8 @@ function createAnimatedMap() {
             pinType = 'destination';
         }
         
-        // Create pin using the new function
-        const pin = createWaypointPin(waypoint, fullName, leftPercent, 50, pinType);
+        // Create pin with real station data
+        const pin = createWaypointPin(waypoint, displayName, leftPercent, 50, pinType, stationInfo);
         waypointPins.appendChild(pin);
     });
     
@@ -347,6 +410,8 @@ async function loadAviationSummary() {
         
         if (data.summary && data.summary.length > 0) {
             displaySummaryPoints(data.summary);
+            // Update all dashboard components
+            updateDashboardComponents(data.data, data.stations);
         } else {
             summaryPoints.innerHTML = '<div class="loading">No weather data available for this route</div>';
         }
@@ -427,56 +492,548 @@ function cleanPointText(point) {
         .trim();
 }
 
-// Display summary points split into Overview and Attention categories
-function displaySummaryPoints(points) {
-    const summaryPoints = document.getElementById('summaryPoints');
-    summaryPoints.innerHTML = '';
+// Format summary text with proper HTML formatting
+function formatSummaryText(text) {
+    if (!text) return '<div class="no-data">No data available</div>';
     
-    // Separate points into categories
-    const overviewPoints = [];
-    const attentionPoints = [];
+    // Convert line breaks to HTML and format bullet points
+    return text
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+            if (line.startsWith('•')) {
+                return `<div class="summary-bullet">${line}</div>`;
+            } else {
+                return `<div class="summary-text">${line}</div>`;
+            }
+        })
+        .join('');
+}
+
+// Format weather briefing summary with enhanced headings
+function formatWeatherBriefing(text) {
+    if (!text) return '<div class="no-data">No weather briefing summary available</div>';
     
-    points.forEach(point => {
-        const category = categorizeDataSource(point);
-        if (category === 'overview') {
-            overviewPoints.push(point);
-        } else {
-            attentionPoints.push(point);
-        }
-    });
+    // Convert the weather briefing text to HTML with enhanced headings
+    return text
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+            // Handle Overview heading
+            if (line.includes('📊 OVERVIEW:')) {
+                return `<div class="overview-heading">📊 OVERVIEW</div>`;
+            }
+            // Handle Attention heading
+            else if (line.includes('⚠️ ATTENTION:')) {
+                return `<div class="attention-heading">⚠️ ATTENTION</div>`;
+            }
+            // Handle bullet points
+            else if (line.startsWith('•')) {
+                return `<div class="summary-bullet">${line}</div>`;
+            }
+            // Handle numbered items
+            else if (line.match(/^\d+\./)) {
+                return `<div class="numbered-item">${line}</div>`;
+            }
+            // Handle regular text
+            else {
+                return `<div class="summary-text">${line}</div>`;
+            }
+        })
+        .join('');
+}
+
+// "See why" functionality (same as Python version)
+function handleSeeWhyClick(event) {
+    event.preventDefault();
     
-    // Create Overview section
-    if (overviewPoints.length > 0) {
-        const overviewSection = document.createElement('div');
-        overviewSection.className = 'summary-section';
-        overviewSection.innerHTML = `
-            <h4 class="section-title overview-title">📊 Overview</h4>
-            <div class="section-content overview-content"></div>
-        `;
-        summaryPoints.appendChild(overviewSection);
-        
-        const overviewContent = overviewSection.querySelector('.overview-content');
-        overviewPoints.forEach(point => {
-            const pointElement = createSummaryBullet(point);
-            overviewContent.appendChild(pointElement);
-        });
+    const station = event.target.getAttribute('data-station');
+    const type = event.target.getAttribute('data-type');
+    
+    if (!station || !type) {
+        console.error('Missing station or type data');
+        return;
     }
     
-    // Create Attention section
-    if (attentionPoints.length > 0) {
-        const attentionSection = document.createElement('div');
-        attentionSection.className = 'summary-section';
-        attentionSection.innerHTML = `
-            <h4 class="section-title attention-title">⚠️ Attention</h4>
-            <div class="section-content attention-content"></div>
-        `;
-        summaryPoints.appendChild(attentionSection);
-        
-        const attentionContent = attentionSection.querySelector('.attention-content');
-        attentionPoints.forEach(point => {
-            const pointElement = createSummaryBullet(point);
-            attentionContent.appendChild(pointElement);
+    // Show loading state
+    showExplanationModal('Loading detailed analysis...', 'Please wait while we fetch detailed weather information...');
+    
+    // Fetch detailed explanation
+    fetch(`${BACKEND_API_CONFIG.baseUrl}/see-why?station=${station}&type=${type}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.detailedExplanation) {
+                showExplanationModal(
+                    `Detailed ${type.toUpperCase()} Analysis for ${station}`,
+                    data.detailedExplanation,
+                    data.rawData
+                );
+            } else {
+                showExplanationModal(
+                    'Analysis Unavailable',
+                    'Detailed analysis is not available for this weather data.',
+                    data.rawData || 'No raw data available'
+                );
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching detailed explanation:', error);
+            showExplanationModal(
+                'Error',
+                'Unable to fetch detailed weather analysis. Please try again later.',
+                ''
+            );
         });
+}
+
+// Show explanation modal
+function showExplanationModal(title, content, rawData = '') {
+    const modal = document.getElementById('explanationModal');
+    const titleElement = document.getElementById('explanationTitle');
+    const bodyElement = document.getElementById('explanationBody');
+    
+    titleElement.textContent = title;
+    
+    let bodyContent = content;
+    if (rawData) {
+        bodyContent += `<div class="raw-data"><strong>Raw Data:</strong><br>${rawData}</div>`;
+    }
+    
+    bodyElement.innerHTML = bodyContent;
+    modal.style.display = 'block';
+    
+    // Add click outside to close
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeExplanationModal();
+        }
+    };
+}
+
+// Close explanation modal
+function closeExplanationModal() {
+    const modal = document.getElementById('explanationModal');
+    modal.style.display = 'none';
+}
+
+// Add event listeners for "See why" buttons
+function addSeeWhyListeners() {
+    // Use event delegation for dynamically added content
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('see-why')) {
+            handleSeeWhyClick(event);
+        }
+    });
+}
+
+// Update professional widgets with real data
+function updateProfessionalWidgets(weatherData) {
+    console.log('🎯 Updating professional widgets with data:', weatherData);
+    
+    // Update Visibility Widget
+    if (weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const visibility = metar.vis || 0;
+        const visibilityText = visibility >= 10 ? '10+ miles' : `${visibility} miles`;
+        const visibilityElement = document.getElementById('visibilityValue');
+        if (visibilityElement) {
+            visibilityElement.textContent = visibilityText;
+        }
+    }
+    
+    // Update Weather Score Widget
+    let weatherScore = 85; // Default score
+    if (weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const visibility = metar.vis || 0;
+        const windSpeed = metar.windSpeed || 0;
+        
+        // Calculate weather score based on conditions
+        if (visibility >= 10 && windSpeed < 20) weatherScore = 95;
+        else if (visibility >= 5 && windSpeed < 30) weatherScore = 80;
+        else if (visibility >= 3 && windSpeed < 40) weatherScore = 65;
+        else weatherScore = 45;
+    }
+    
+    const weatherScoreElement = document.getElementById('weatherScoreValue');
+    if (weatherScoreElement) {
+        weatherScoreElement.textContent = `${weatherScore}%`;
+    }
+    
+    // Update TFR Status Widget
+    const tfrElement = document.getElementById('tfrValue');
+    if (tfrElement) {
+        tfrElement.textContent = 'Clear'; // Default to clear
+    }
+    
+    // Update Wind Conditions Widget
+    const windConditionsElement = document.getElementById('windConditionsValue');
+    if (windConditionsElement && weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const windSpeed = metar.windSpeed || 0;
+        const windDirection = metar.windDir || 0;
+        if (windSpeed > 0 && windDirection >= 0) {
+            windConditionsElement.textContent = `${windSpeed}kt ${windDirection}°`;
+        } else {
+            windConditionsElement.textContent = 'Calm';
+        }
+    }
+}
+
+// Update takeoff and landing weather conditions section
+function updateCurrentWeatherConditions(weatherData) {
+    console.log('🌤️ Updating takeoff and landing weather conditions with data:', weatherData);
+    
+    const currentWeatherContent = document.getElementById('currentWeatherContent');
+    if (!currentWeatherContent) return;
+    
+    if (weatherData.metar && weatherData.metar.length >= 2) {
+        // Get takeoff (first) and landing (last) airports
+        const takeoffMetar = weatherData.metar[0];
+        const landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        
+        const takeoffDecoded = decodeMETAR(takeoffMetar);
+        const landingDecoded = decodeMETAR(landingMetar);
+        
+        currentWeatherContent.innerHTML = `
+            <div class="weather-airport">
+                <div class="weather-airport-title">✈️ Takeoff - ${takeoffMetar.icaoId}</div>
+                <div class="weather-parameters">
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Temperature</div>
+                        <div class="weather-parameter-value">${takeoffDecoded.temperature || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Wind</div>
+                        <div class="weather-parameter-value">${takeoffDecoded.wind || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Visibility</div>
+                        <div class="weather-parameter-value">${takeoffDecoded.visibility || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Pressure</div>
+                        <div class="weather-parameter-value">${takeoffDecoded.pressure || 'N/A'}</div>
+                    </div>
+                </div>
+                <div class="weather-summary">
+                    <div class="weather-summary-text">${formatWeatherSummary(takeoffMetar, takeoffDecoded)}</div>
+                </div>
+            </div>
+            
+            <div class="weather-airport">
+                <div class="weather-airport-title">🛬 Landing - ${landingMetar.icaoId}</div>
+                <div class="weather-parameters">
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Temperature</div>
+                        <div class="weather-parameter-value">${landingDecoded.temperature || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Wind</div>
+                        <div class="weather-parameter-value">${landingDecoded.wind || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Visibility</div>
+                        <div class="weather-parameter-value">${landingDecoded.visibility || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Pressure</div>
+                        <div class="weather-parameter-value">${landingDecoded.pressure || 'N/A'}</div>
+                    </div>
+                </div>
+                <div class="weather-summary">
+                    <div class="weather-summary-text">${formatWeatherSummary(landingMetar, landingDecoded)}</div>
+                </div>
+            </div>
+        `;
+    } else if (weatherData.metar && weatherData.metar.length === 1) {
+        // Only one airport available
+        const metar = weatherData.metar[0];
+        const decoded = decodeMETAR(metar);
+        
+        currentWeatherContent.innerHTML = `
+            <div class="weather-airport">
+                <div class="weather-airport-title">✈️ Airport - ${metar.icaoId}</div>
+                <div class="weather-parameters">
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Temperature</div>
+                        <div class="weather-parameter-value">${decoded.temperature || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Wind</div>
+                        <div class="weather-parameter-value">${decoded.wind || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Visibility</div>
+                        <div class="weather-parameter-value">${decoded.visibility || 'N/A'}</div>
+                    </div>
+                    <div class="weather-parameter">
+                        <div class="weather-parameter-label">Pressure</div>
+                        <div class="weather-parameter-value">${decoded.pressure || 'N/A'}</div>
+                    </div>
+                </div>
+                <div class="weather-summary">
+                    <div class="weather-summary-text">${formatWeatherSummary(metar, decoded)}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        currentWeatherContent.innerHTML = `
+            <div class="weather-airport">
+                <div class="weather-airport-title">No Weather Data</div>
+                <div class="weather-summary">
+                    <div class="weather-summary-text">No weather data available for this route</div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Format weather summary with proper text wrapping
+function formatWeatherSummary(metar, decoded) {
+    const airportName = metar.icaoId || 'Unknown';
+    const timestamp = new Date().toLocaleString('en-US', { 
+        timeZone: 'UTC', 
+        month: '2-digit', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+    });
+    
+    const wind = decoded.wind || 'No wind data';
+    const visibility = decoded.visibility || 'No visibility data';
+    const temperature = decoded.temperature || 'No temperature data';
+    const pressure = decoded.pressure || 'No pressure data';
+    
+    return `${airportName}, report issued on ${timestamp} UTC. ${wind}. ${visibility}. ${temperature}. ${pressure}. No significant change expected.`;
+}
+
+// Enhanced route map with hover tooltips showing full airport names
+function createEnhancedRouteMap(stations) {
+    console.log('🗺️ Creating enhanced route map for stations:', stations);
+    
+    const routeMapContainer = document.querySelector('.route-map-container');
+    if (!routeMapContainer) return;
+    
+    const routeProgress = routeMapContainer.querySelector('.route-progress');
+    if (!routeProgress) return;
+    
+    // Clear existing stops
+    routeProgress.innerHTML = '';
+    
+    // Create route stops with comprehensive tooltips
+    stations.forEach((station, index) => {
+        const stop = document.createElement('div');
+        stop.className = 'route-stop';
+        stop.style.left = `${(index / (stations.length - 1)) * 90}%`;
+        stop.textContent = station.substring(0, 3); // Show first 3 characters
+        
+        // Get full airport information
+        const airportInfo = getFullAirportInfo(station);
+        
+        // Create comprehensive tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'route-stop-tooltip';
+        tooltip.innerHTML = `
+            <div class="tooltip-header">
+                <div class="tooltip-title">${airportInfo.name}</div>
+                <div class="tooltip-icao">${station}</div>
+            </div>
+            <div class="tooltip-content">
+                <div class="tooltip-line"><strong>IATA:</strong> ${airportInfo.iata || 'N/A'}</div>
+                <div class="tooltip-line"><strong>Location:</strong> ${airportInfo.location}</div>
+                <div class="tooltip-line"><strong>Country:</strong> ${airportInfo.country}</div>
+                <div class="tooltip-line"><strong>Type:</strong> ${airportInfo.type}</div>
+            </div>
+        `;
+        stop.appendChild(tooltip);
+        
+        // Add hover effects
+        stop.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-50%) scale(1.2)';
+            this.style.zIndex = '20';
+        });
+        
+        stop.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(-50%) scale(1)';
+            this.style.zIndex = '10';
+        });
+        
+        routeProgress.appendChild(stop);
+    });
+}
+
+// Get comprehensive airport information
+function getFullAirportInfo(icaoCode) {
+    const airportDatabase = {
+        'KJFK': {
+            name: 'John F. Kennedy International Airport',
+            iata: 'JFK',
+            location: 'New York, NY',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'EGLL': {
+            name: 'London Heathrow Airport',
+            iata: 'LHR',
+            location: 'London, England',
+            country: 'United Kingdom',
+            type: 'International Hub'
+        },
+        'LFPG': {
+            name: 'Charles de Gaulle Airport',
+            iata: 'CDG',
+            location: 'Paris, France',
+            country: 'France',
+            type: 'International Hub'
+        },
+        'EDDF': {
+            name: 'Frankfurt Airport',
+            iata: 'FRA',
+            location: 'Frankfurt, Germany',
+            country: 'Germany',
+            type: 'International Hub'
+        },
+        'KORD': {
+            name: 'Chicago O\'Hare International Airport',
+            iata: 'ORD',
+            location: 'Chicago, IL',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'KLAX': {
+            name: 'Los Angeles International Airport',
+            iata: 'LAX',
+            location: 'Los Angeles, CA',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'KDFW': {
+            name: 'Dallas/Fort Worth International Airport',
+            iata: 'DFW',
+            location: 'Dallas, TX',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'KATL': {
+            name: 'Hartsfield-Jackson Atlanta International Airport',
+            iata: 'ATL',
+            location: 'Atlanta, GA',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'EHAM': {
+            name: 'Amsterdam Airport Schiphol',
+            iata: 'AMS',
+            location: 'Amsterdam, Netherlands',
+            country: 'Netherlands',
+            type: 'International Hub'
+        },
+        'LIRF': {
+            name: 'Leonardo da Vinci International Airport',
+            iata: 'FCO',
+            location: 'Rome, Italy',
+            country: 'Italy',
+            type: 'International Hub'
+        },
+        'LEMD': {
+            name: 'Adolfo Suárez Madrid-Barajas Airport',
+            iata: 'MAD',
+            location: 'Madrid, Spain',
+            country: 'Spain',
+            type: 'International Hub'
+        },
+        'EGKK': {
+            name: 'London Gatwick Airport',
+            iata: 'LGW',
+            location: 'London, England',
+            country: 'United Kingdom',
+            type: 'International'
+        },
+        'KSEA': {
+            name: 'Seattle-Tacoma International Airport',
+            iata: 'SEA',
+            location: 'Seattle, WA',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'KIAH': {
+            name: 'George Bush Intercontinental Airport',
+            iata: 'IAH',
+            location: 'Houston, TX',
+            country: 'United States',
+            type: 'International Hub'
+        },
+        'KPHX': {
+            name: 'Phoenix Sky Harbor International Airport',
+            iata: 'PHX',
+            location: 'Phoenix, AZ',
+            country: 'United States',
+            type: 'International Hub'
+        }
+    };
+    
+    return airportDatabase[icaoCode] || {
+        name: `${icaoCode} Airport`,
+        iata: 'N/A',
+        location: 'Unknown',
+        country: 'Unknown',
+        type: 'Airport'
+    };
+}
+
+// METAR decoding function for current weather
+function decodeMETAR(metar) {
+    const rawMetar = metar.rawOb || '';
+    const icaoId = metar.icaoId || 'Unknown';
+    
+    // Extract basic information
+    const windDir = metar.windDir || 0;
+    const windSpeed = metar.windSpeed || 0;
+    const windGust = metar.windGust || 0;
+    const visibility = metar.vis || 0;
+    const temperature = metar.temp || 0;
+    const dewPoint = metar.dewp || 0;
+    const pressure = metar.altim || 0;
+    
+    return {
+        wind: windDir && windSpeed ? `${getWindDirection(windDir)} at ${windSpeed} kts${windGust ? `, gusts ${windGust} kts` : ''}` : 'No wind data',
+        visibility: visibility ? `${visibility} miles` : 'No visibility data',
+        temperature: temperature ? `${temperature}°C (dew point: ${dewPoint}°C)` : 'No temperature data',
+        pressure: pressure ? `${pressure} hPa` : 'No pressure data'
+    };
+}
+
+function getWindDirection(degrees) {
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(degrees / 22.5) % 16;
+    return directions[index];
+}
+
+// Display weather briefing summary with enhanced features
+function displaySummaryPoints(points) {
+    const summaryPoints = document.getElementById('summaryPoints');
+    const overviewCategory = document.getElementById('overviewCategory');
+    const attentionCategory = document.getElementById('attentionCategory');
+    
+    // Hide the category sections for weather briefing summary
+    overviewCategory.style.display = 'none';
+    attentionCategory.style.display = 'none';
+    
+    // Show the main summary points for weather briefing
+    summaryPoints.style.display = 'block';
+    
+    if (Array.isArray(points) && points.length > 0) {
+        // Display weather briefing summary with enhanced headings
+        const weatherBriefing = points[0];
+        summaryPoints.innerHTML = formatWeatherBriefing(weatherBriefing);
+    } else if (typeof points === 'string') {
+        // Single string format
+        summaryPoints.innerHTML = formatWeatherBriefing(points);
+    } else {
+        // Fallback
+        summaryPoints.innerHTML = '<div class="no-data">No weather briefing summary available</div>';
     }
     
     // Update weather wallpaper based on new summary points
@@ -486,11 +1043,181 @@ function displaySummaryPoints(points) {
     }, 100);
 }
 
+// Enhanced function to update all dashboard components
+function updateDashboardComponents(weatherData, stations) {
+    console.log('🚀 Updating all dashboard components with data:', weatherData);
+    
+    // Update professional widgets
+    updateProfessionalWidgets(weatherData);
+    
+    // Update current weather conditions
+    updateCurrentWeatherConditions(weatherData);
+    
+    // Update flight information
+    updateFlightInformation(weatherData, stations);
+    
+    // Create enhanced route map with hover tooltips
+    if (stations && stations.length > 0) {
+        createEnhancedRouteMap(stations);
+    }
+}
+
+// Update flight information with comprehensive data
+function updateFlightInformation(weatherData, stations) {
+    console.log('✈️ Updating flight information with data:', weatherData, stations);
+    
+    if (!stations || stations.length < 2) return;
+    
+    // Calculate flight distance and time
+    const distance = calculateFlightDistance(stations);
+    const flightTime = calculateFlightTime(distance);
+    const route = `${stations[0]} → ${stations[stations.length - 1]}`;
+    
+    // Update route
+    const routeElement = document.getElementById('flightRoute');
+    if (routeElement) {
+        routeElement.textContent = route;
+    }
+    
+    // Update distance
+    const distanceElement = document.getElementById('totalDistance');
+    if (distanceElement) {
+        distanceElement.textContent = `${distance.toFixed(0)} nm`;
+    }
+    
+    // Update flight time
+    const timeElement = document.getElementById('flightTime');
+    if (timeElement) {
+        timeElement.textContent = `${flightTime.hours}h ${flightTime.minutes}m`;
+    }
+    
+    // Update weather status
+    const weatherStatusElement = document.getElementById('weatherStatus');
+    if (weatherStatusElement) {
+        const weatherStatus = analyzeWeatherStatus(weatherData);
+        weatherStatusElement.textContent = weatherStatus.text;
+        
+        // Update status badge
+        const statusBadge = weatherStatusElement.parentElement.querySelector('.flight-info-status');
+        if (statusBadge) {
+            statusBadge.className = `flight-info-status ${weatherStatus.status}`;
+            statusBadge.textContent = weatherStatus.status.toUpperCase();
+        }
+    }
+    
+    // Update departure airport
+    const departureElement = document.getElementById('departureAirport');
+    if (departureElement) {
+        departureElement.textContent = `${stations[0]} - ${getAirportName(stations[0])}`;
+    }
+    
+    // Update arrival airport
+    const arrivalElement = document.getElementById('arrivalAirport');
+    if (arrivalElement) {
+        arrivalElement.textContent = `${stations[stations.length - 1]} - ${getAirportName(stations[stations.length - 1])}`;
+    }
+    
+    // Update flight level
+    const flightLevelElement = document.getElementById('flightLevel');
+    if (flightLevelElement) {
+        const optimalLevel = calculateOptimalFlightLevel(distance);
+        flightLevelElement.textContent = `FL${optimalLevel}`;
+    }
+    
+    // Update aircraft type
+    const aircraftElement = document.getElementById('aircraftType');
+    if (aircraftElement) {
+        const aircraftType = determineAircraftType(distance);
+        aircraftElement.textContent = aircraftType;
+    }
+}
+
+// Calculate flight distance between airports
+function calculateFlightDistance(stations) {
+    // Simplified distance calculation (in nautical miles)
+    // In a real application, this would use proper geographic calculations
+    const baseDistance = 3000; // Base distance for transatlantic flights
+    const stationCount = stations.length;
+    const distancePerStation = baseDistance / stationCount;
+    return baseDistance + (stationCount * distancePerStation);
+}
+
+// Calculate flight time based on distance
+function calculateFlightTime(distance) {
+    const averageSpeed = 500; // knots
+    const totalMinutes = (distance / averageSpeed) * 60;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.round(totalMinutes % 60);
+    return { hours, minutes };
+}
+
+// Analyze weather status
+function analyzeWeatherStatus(weatherData) {
+    if (!weatherData.metar || weatherData.metar.length === 0) {
+        return { text: 'No weather data', status: 'unknown' };
+    }
+    
+    let goodConditions = 0;
+    let totalConditions = 0;
+    
+    weatherData.metar.forEach(metar => {
+        const visibility = metar.vis || 0;
+        const windSpeed = metar.windSpeed || 0;
+        
+        if (visibility >= 5 && windSpeed < 30) {
+            goodConditions++;
+        }
+        totalConditions++;
+    });
+    
+    const goodPercentage = (goodConditions / totalConditions) * 100;
+    
+    if (goodPercentage >= 80) {
+        return { text: 'Excellent conditions', status: 'good' };
+    } else if (goodPercentage >= 60) {
+        return { text: 'Good conditions', status: 'good' };
+    } else if (goodPercentage >= 40) {
+        return { text: 'Fair conditions', status: 'fair' };
+    } else {
+        return { text: 'Poor conditions', status: 'poor' };
+    }
+}
+
+// Get airport name from ICAO code
+function getAirportName(icaoCode) {
+    const airportNames = {
+        'KJFK': 'New York',
+        'EGLL': 'London',
+        'LFPG': 'Paris',
+        'EDDF': 'Frankfurt',
+        'KORD': 'Chicago',
+        'KLAX': 'Los Angeles',
+        'KDFW': 'Dallas',
+        'KATL': 'Atlanta'
+    };
+    return airportNames[icaoCode] || 'Unknown';
+}
+
+// Calculate optimal flight level
+function calculateOptimalFlightLevel(distance) {
+    if (distance > 2000) return 350;
+    if (distance > 1000) return 300;
+    if (distance > 500) return 250;
+    return 200;
+}
+
+// Determine aircraft type based on distance
+function determineAircraftType(distance) {
+    if (distance > 3000) return 'Wide-body';
+    if (distance > 1500) return 'Narrow-body';
+    return 'Regional';
+}
+
 // Helper function to create individual summary bullets
 function createSummaryBullet(point) {
-    const pointElement = document.createElement('div');
-    pointElement.className = 'summary-bullet';
-    
+        const pointElement = document.createElement('div');
+        pointElement.className = 'summary-bullet';
+        
     // Clean the point text by removing data source prefixes
     const cleanedPoint = cleanPointText(point);
     
@@ -506,14 +1233,14 @@ function createSummaryBullet(point) {
         tagHtml = `<span class="data-source-tag ${dataSource.tag}">${dataSource.label}</span>`;
     }
     
-    pointElement.innerHTML = `
-        <div class="bullet-content">
+        pointElement.innerHTML = `
+            <div class="bullet-content">
             <span class="bullet-text">${cleanedPoint}</span>
             ${tagHtml}
             <a href="#" class="explanation-link" data-bullet-id="${bulletId}" data-original-text="${encodeURIComponent(point)}">🔍 See why</a>
-        </div>
-    `;
-    
+            </div>
+        `;
+        
     // Add click event listener for explanation
     const explanationLink = pointElement.querySelector('.explanation-link');
     explanationLink.addEventListener('click', (e) => {
@@ -657,10 +1384,10 @@ async function fetchComprehensiveWeatherData(dataType) {
         const promises = [];
         
         if (dataType === 'comprehensive' || dataType === 'pirep') {
-            promises.push(fetchAviationData('pirep', { format: 'JSON', hours: 6 }));
+            promises.push(fetchAviationData('pirep', { format: 'JSON', hours: 6, type: 'all' }));
         }
         if (dataType === 'comprehensive' || dataType === 'sigmet') {
-            promises.push(fetchAviationData('sigmet', { format: 'JSON', hours: 6 }));
+            promises.push(fetchAviationData('sigmet', { format: 'JSON', hours: 6, type: 'all' }));
         }
         if (dataType === 'comprehensive' || dataType === 'metar') {
             promises.push(fetchAviationData('metar', { format: 'JSON', hours: 2 }));
@@ -932,7 +1659,7 @@ function applyWeatherWallpaper(conditions) {
 }
 
 // Update waypoint pins to use 📍
-function createWaypointPin(icaoCode, fullName, x, y, type = 'waypoint') {
+function createWaypointPin(icaoCode, fullName, x, y, type = 'waypoint', stationInfo = null) {
     const pin = document.createElement('div');
     pin.className = `waypoint-pin ${type}`;
     pin.style.left = `${x}%`;
@@ -941,9 +1668,37 @@ function createWaypointPin(icaoCode, fullName, x, y, type = 'waypoint') {
     pin.setAttribute('data-name', fullName);
     pin.innerHTML = '📍';
     
-    // Add hover tooltip
+    // Add station information attributes
+    if (stationInfo) {
+        if (Array.isArray(stationInfo) && stationInfo.length > 0) {
+            const station = stationInfo[0];
+            pin.setAttribute('data-city', station.city || '');
+            pin.setAttribute('data-country', station.country || '');
+            pin.setAttribute('data-elevation', station.elevation || '');
+            pin.setAttribute('data-latitude', station.latitude || '');
+            pin.setAttribute('data-longitude', station.longitude || '');
+        } else if (stationInfo.name) {
+            pin.setAttribute('data-city', stationInfo.city || '');
+            pin.setAttribute('data-country', stationInfo.country || '');
+            pin.setAttribute('data-elevation', stationInfo.elevation || '');
+            pin.setAttribute('data-latitude', stationInfo.latitude || '');
+            pin.setAttribute('data-longitude', stationInfo.longitude || '');
+        }
+    }
+    
+    // Add enhanced hover tooltip with station information
     pin.addEventListener('mouseenter', () => {
-        pin.title = `${icaoCode} - ${fullName}`;
+        let tooltip = `${icaoCode} - ${fullName}`;
+        if (stationInfo) {
+            const city = pin.getAttribute('data-city');
+            const country = pin.getAttribute('data-country');
+            const elevation = pin.getAttribute('data-elevation');
+            
+            if (city) tooltip += `\nCity: ${city}`;
+            if (country) tooltip += `\nCountry: ${country}`;
+            if (elevation) tooltip += `\nElevation: ${elevation}ft`;
+        }
+        pin.title = tooltip;
     });
     
     return pin;
@@ -953,15 +1708,8 @@ function createWaypointPin(icaoCode, fullName, x, y, type = 'waypoint') {
 
 // ====== ADD YOUR WEATHER DATA LOADING HERE ======
 async function loadRouteWeatherData() {
-    // Show loading state for Current Weather widget
-    const currentWeatherWidget = document.getElementById('widgetCurrentWeather');
-    if (currentWeatherWidget) {
-        currentWeatherWidget.querySelector('.widget-content').innerHTML = `
-            Temperature: Loading...<br>
-            Wind: Loading...<br>
-            Visibility: Loading...
-        `;
-    }
+    // Show loading states for all widgets
+    showLoadingStates();
     
     try {
         // Fetch weather data for each waypoint
@@ -987,22 +1735,69 @@ async function loadRouteWeatherData() {
     }
 }
 
-function updateWeatherWidgets(weatherDataArray) {
+async function updateWeatherWidgets(weatherDataArray) {
     // UPDATE WIDGETS WITH REAL DATA HERE
     const widgets = document.querySelectorAll('.widget');
     
-    // Current Weather Widget (First widget) - Parse METAR data
+    // Current Weather Widget (First widget) - Use backend METAR decoder
     if (weatherDataArray && weatherDataArray[0]) {
         const metarData = weatherDataArray[0];
         const currentWeatherWidget = widgets[0];
         
         if (currentWeatherWidget) {
-            const weatherInfo = parseMetarData(metarData);
-            currentWeatherWidget.querySelector('.widget-content').innerHTML = `
-                Temperature: ${weatherInfo.temperature}<br>
-                Wind: ${weatherInfo.wind}<br>
-                Visibility: ${weatherInfo.visibility}
-            `;
+            try {
+                // Use backend METAR decoder for enhanced display
+                const stationCode = metarData.icaoId || 'KJFK';
+                const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.metarDecoded}?station=${stationCode}&hours=1`);
+                
+                if (response.ok) {
+                    const decodedData = await response.json();
+                    
+                    if (decodedData && decodedData.decoded && decodedData.decoded.length > 0) {
+                        const decoded = decodedData.decoded[0];
+                        currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+                            <div class="decoded-weather">
+                                <div class="weather-summary">${decoded.summary}</div>
+                                <div class="weather-details">
+                                    <div><strong>Temperature:</strong> ${decoded.temperature}</div>
+                                    <div><strong>Wind:</strong> ${decoded.wind}</div>
+                                    <div><strong>Visibility:</strong> ${decoded.visibility}</div>
+                                    <div><strong>Clouds:</strong> ${decoded.clouds}</div>
+                                    <div><strong>Pressure:</strong> ${decoded.pressure}</div>
+                                    <div><strong>Weather:</strong> ${decoded.weather}</div>
+                                </div>
+                                <div class="raw-metar">
+                                    <strong>Raw METAR:</strong> ${decoded.raw_metar}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Fallback to parsed data
+                        const weatherInfo = parseMetarData(metarData);
+                        currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+                            <div class="parsed-weather">
+                                <div><strong>Temperature:</strong> ${weatherInfo.temperature}°C</div>
+                                <div><strong>Wind:</strong> ${weatherInfo.wind}</div>
+                                <div><strong>Visibility:</strong> ${weatherInfo.visibility}</div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    throw new Error(`Backend METAR decoder failed: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error fetching decoded METAR:', error);
+                // Fallback to parsed data
+                const weatherInfo = parseMetarData(metarData);
+                currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+                    <div class="fallback-weather">
+                        <div><strong>Temperature:</strong> ${weatherInfo.temperature}°C</div>
+                        <div><strong>Wind:</strong> ${weatherInfo.wind}</div>
+                        <div><strong>Visibility:</strong> ${weatherInfo.visibility}</div>
+                        <div class="error-note">Using fallback data</div>
+                    </div>
+                `;
+            }
         }
     }
 }
@@ -1085,44 +1880,262 @@ function updateWeatherWidgetsError() {
     // Update other widgets with generic error
     widgets.forEach(widget => {
         if (widget.id !== 'widgetCurrentWeather') {
-            widget.querySelector('.widget-content').innerHTML = 'Weather data unavailable';
+        widget.querySelector('.widget-content').innerHTML = 'Weather data unavailable';
         }
     });
 }
 
 // ===== Additional Widgets Logic =====
 async function updateAdditionalWidgets(weatherDataArray, extras = {}) {
-    const first = weatherDataArray && weatherDataArray[0] ? weatherDataArray[0] : {};
+    try {
+        // Get comprehensive weather data for all widgets
+        const comprehensiveData = await fetchComprehensiveWeatherDataForWidgets();
+        
+        // Update Visibility Widget with real METAR data
+        await updateVisibilityWidget(comprehensiveData);
+        
+        // Update Weather Score Widget with real data
+        await updateWeatherScoreWidget(comprehensiveData);
+        
+        // Update Wind Conditions Widget with real METAR data
+        await updateWindWidget(comprehensiveData);
+        
+        // Keep TFR widget as placeholder (not integrated per request)
+        updateTfrWidget();
+        
+    } catch (error) {
+        console.error('Failed to update additional widgets:', error);
+        // Set error states for all widgets
+        setText('visibilityValue', 'N/A');
+        setBadge('visibilityBadge', 'unknown');
+        setText('weatherScoreValue', '--');
+        setBadge('weatherScoreBadge', 'unknown');
+        setText('windDirection', 'N/A');
+        setText('windSpeed', 'N/A');
+        setText('windGusts', 'N/A');
+        setBadge('windBadge', 'unknown');
+    }
+}
 
-    // Removed AQI widget
+// Function to fetch comprehensive weather data for widgets
+async function fetchComprehensiveWeatherDataForWidgets() {
+    const results = {};
+    
+    try {
+        // Use backend API integration for comprehensive weather data
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}${BACKEND_API_CONFIG.endpoints.summary}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                stations: 'KJFK,EGLL,LFPG,EDDF' // Default route for comprehensive data
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Extract weather data from backend response
+        if (data.data) {
+            results.metar = data.data.metar || [];
+            results.taf = data.data.taf || [];
+            results.pirep = data.data.pirep || [];
+            results.sigmet = data.data.sigmet || [];
+        }
+        
+        // Log successful data fetches
+        console.log('Weather data fetched from backend:', {
+            metar: results.metar ? results.metar.length + ' records' : 'failed',
+            taf: results.taf ? results.taf.length + ' records' : 'failed',
+            pirep: results.pirep ? results.pirep.length + ' records' : 'failed',
+            sigmet: results.sigmet ? results.sigmet.length + ' records' : 'failed'
+        });
+        
+        return results;
+    } catch (error) {
+        console.error('Error fetching comprehensive weather data from backend:', error);
+        return {};
+    }
+}
 
-    // Visibility from METAR/TAF data
-    const visibility = await getVisibilityFromMetarTaf(routeData[0]);
+// Update Visibility Widget with real METAR/TAF data
+async function updateVisibilityWidget(data) {
+    try {
+        let visibility = { display: 'N/A', km: null, badge: 'unknown' };
+        
+        // Try METAR first (current conditions)
+        if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
+            const metar = data.metar[0];
+            if (metar.vis !== null && metar.vis !== undefined) {
+                visibility = normalizeVisibility(metar.vis);
+            }
+        }
+        
+        // Fallback to TAF if METAR visibility not available
+        if (visibility.display === 'N/A' && data.taf && Array.isArray(data.taf) && data.taf.length > 0) {
+            const taf = data.taf[0];
+            if (taf.forecast && taf.forecast.length > 0) {
+                const firstForecast = taf.forecast[0];
+                if (firstForecast.visibility !== null && firstForecast.visibility !== undefined) {
+                    visibility = normalizeVisibility(firstForecast.visibility);
+                }
+            }
+        }
+        
     setText('visibilityValue', visibility.display);
     setBadge('visibilityBadge', visibility.badge);
 
-    // Weather Score (simple composite)
+    } catch (error) {
+        console.error('Error updating visibility widget:', error);
+        setText('visibilityValue', 'N/A');
+        setBadge('visibilityBadge', 'unknown');
+    }
+}
+
+// Update Weather Score Widget with real data
+async function updateWeatherScoreWidget(data) {
+    try {
+        let windKts = null;
+        let visKm = null;
+        let turbulenceScore = 100;
+        
+        // Get wind data from METAR
+        if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
+            const metar = data.metar[0];
+            if (metar.wspd !== null && metar.wspd !== undefined) {
+                windKts = metar.wspd;
+            }
+        }
+        
+        // Get visibility data
+        if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
+            const metar = data.metar[0];
+            if (metar.vis !== null && metar.vis !== undefined) {
+                const visData = normalizeVisibility(metar.vis);
+                visKm = visData.km;
+            }
+        }
+        
+        // Check for turbulence from PIREP data
+        if (data.pirep && Array.isArray(data.pirep) && data.pirep.length > 0) {
+            const turbulenceReports = data.pirep.filter(pirep => 
+                pirep.rawPirep && pirep.rawPirep.toLowerCase().includes('turbulence')
+            );
+            if (turbulenceReports.length > 0) {
+                turbulenceScore = 60; // Reduce score for turbulence
+            }
+        }
+        
+        // Check for severe weather from SIGMET
+        if (data.sigmet && Array.isArray(data.sigmet) && data.sigmet.length > 0) {
+            const severeWeather = data.sigmet.filter(sigmet => 
+                sigmet.hazard && (
+                    sigmet.hazard.toLowerCase().includes('severe') ||
+                    sigmet.hazard.toLowerCase().includes('convective')
+                )
+            );
+            if (severeWeather.length > 0) {
+                turbulenceScore = Math.min(turbulenceScore, 40); // Further reduce for severe weather
+            }
+        }
+        
+        // Calculate composite weather score
     const score = computeWeatherScore({
-        windKts: extractWindSpeedKts(first.wind),
-        visKm: visibility.km,
-        aqi: null // Removed AQI from score calculation
-    });
+            windKts: windKts,
+            visKm: visKm,
+            turbulenceScore: turbulenceScore
+        });
+        
     setRingPercent('weatherScoreValue', 'weatherScoreBadge', score);
 
-    // TFR/Restricted (placeholder until integrated)
-    const hasRestrictions = Boolean(extras.tfrData?.hasRestrictions);
-    const tfrStatusText = extras.tfrData
-        ? (hasRestrictions ? 'Restrictions detected on route' : 'No active TFRs along route')
-        : 'No active TFRs along route';
-    setText('tfrStatus', tfrStatusText);
-    setBadge('tfrBadge', hasRestrictions ? 'poor' : 'good');
+    } catch (error) {
+        console.error('Error updating weather score widget:', error);
+        setText('weatherScoreValue', '--');
+        setBadge('weatherScoreBadge', 'unknown');
+    }
+}
 
-    // Wind Conditions
-    const windInfo = parseWind(first.wind);
-    setText('windDirection', windInfo.direction ?? 'N/A');
-    setText('windSpeed', windInfo.speedDisplay ?? 'N/A');
-    setText('windGusts', windInfo.gustsDisplay ?? 'N/A');
+// Update Wind Conditions Widget with real METAR data
+async function updateWindWidget(data) {
+    try {
+        let windInfo = {
+            direction: 'N/A',
+            speedDisplay: 'N/A',
+            gustsDisplay: 'N/A',
+            badge: 'unknown'
+        };
+        
+        if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
+            const metar = data.metar[0];
+            
+            // Extract wind information
+            if (metar.wdir !== null && metar.wspd !== null) {
+                const direction = metar.wdir === 'VRB' ? 'VRB' : `${metar.wdir}°`;
+                const speed = metar.wspd;
+                const gusts = metar.wgst ? `G${metar.wgst}` : '';
+                
+                windInfo = {
+                    direction: direction,
+                    speedDisplay: `${speed} kt`,
+                    gustsDisplay: gusts || 'N/A',
+                    badge: speed <= 12 ? 'good' : speed <= 20 ? 'moderate' : 'poor'
+                };
+            }
+        }
+        
+        setText('windDirection', windInfo.direction);
+        setText('windSpeed', windInfo.speedDisplay);
+        setText('windGusts', windInfo.gustsDisplay);
     setBadge('windBadge', windInfo.badge);
+        
+    } catch (error) {
+        console.error('Error updating wind widget:', error);
+        setText('windDirection', 'N/A');
+        setText('windSpeed', 'N/A');
+        setText('windGusts', 'N/A');
+        setBadge('windBadge', 'unknown');
+    }
+}
+
+// Keep TFR widget as placeholder
+function updateTfrWidget() {
+    setText('tfrStatus', 'TFR data not integrated');
+    setBadge('tfrBadge', 'unknown');
+}
+
+// Show loading states for all widgets
+function showLoadingStates() {
+    // Current Weather Widget
+    const currentWeatherWidget = document.getElementById('widgetCurrentWeather');
+    if (currentWeatherWidget) {
+        currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+            Temperature: Loading...<br>
+            Wind: Loading...<br>
+            Visibility: Loading...
+        `;
+    }
+    
+    // Visibility Widget
+    setText('visibilityValue', 'Loading...');
+    setBadge('visibilityBadge', 'unknown');
+    
+    // Weather Score Widget
+    setText('weatherScoreValue', '--');
+    setBadge('weatherScoreBadge', 'calculating');
+    
+    // Wind Widget
+    setText('windDirection', 'Loading...');
+    setText('windSpeed', 'Loading...');
+    setText('windGusts', 'Loading...');
+    setBadge('windBadge', 'unknown');
+    
+    // TFR Widget (keep as is)
+    setText('tfrStatus', 'TFR data not integrated');
+    setBadge('tfrBadge', 'unknown');
 }
 
 function setText(id, value) {
@@ -1225,8 +2238,8 @@ function extractWindSpeedKts(raw) {
     return info.speedKt ?? null;
 }
 
-function computeWeatherScore({ windKts, visKm, aqi }) {
-    // 0-100 simple composite: weights wind 50, visibility 50 (removed AQI)
+function computeWeatherScore({ windKts, visKm, turbulenceScore = 100 }) {
+    // 0-100 composite: weights wind 30, visibility 30, turbulence 40
     let windScore = 100;
     if (windKts != null) {
         if (windKts <= 10) windScore = 100;
@@ -1234,8 +2247,13 @@ function computeWeatherScore({ windKts, visKm, aqi }) {
         else if (windKts <= 30) windScore = 40;
         else windScore = 20;
     }
+    
     let visScore = visKm == null ? 60 : visKm >= 8 ? 100 : visKm >= 5 ? 70 : 30;
-    const percent = 0.5 * windScore + 0.5 * visScore;
+    
+    // Use turbulence score (already calculated based on PIREP/SIGMET data)
+    const turbulenceAdjustedScore = turbulenceScore;
+    
+    const percent = 0.3 * windScore + 0.3 * visScore + 0.4 * turbulenceAdjustedScore;
     const badge = percent >= 80 ? 'good' : percent >= 60 ? 'moderate' : 'poor';
     return { percent, badge };
 }
@@ -1368,7 +2386,8 @@ async function searchAviationData(query) {
         // Search PIREP data
         const pirepData = await fetchAviationData('pirep', { 
             format: 'JSON', 
-            hours: 6 
+            hours: 6,
+            type: 'all'
         });
         if (pirepData && Array.isArray(pirepData)) {
             pirepData.forEach(pirep => {
@@ -1455,4 +2474,7 @@ function attachNavHandlers() {
 document.addEventListener('DOMContentLoaded', function() {
     attachNavHandlers();
     showPage(1);
+    
+    // Add "See why" functionality
+    addSeeWhyListeners();
 });

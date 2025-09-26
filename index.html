@@ -65,81 +65,126 @@
                         <div class="summary-points" id="summaryPoints">
                             <div class="loading">Analyzing weather data...</div>
                         </div>
-                    </div>
-                    
-                    <!-- Horizontal Widgets Row -->
-                    <div class="horizontal-widgets">
-                        <div class="widget" id="widgetCurrentWeather">
-                            <h4>Current Weather</h4>
-                            <div class="widget-content">
-                                Temperature: 22°C<br>
-                                Wind: 10kt NE<br>
-                                Visibility: 10km
+                        
+                        <!-- Overview Category -->
+                        <div class="summary-category" id="overviewCategory" style="display: none;">
+                            <h4 class="category-title">📊 Overview</h4>
+                            <div class="category-content" id="overviewContent">
+                                <div class="loading">Analyzing overview data...</div>
                             </div>
                         </div>
-
-                        <div class="widget" id="widgetVisibility">
-                            <h4>Visibility</h4>
-                            <div class="widget-content">
-                                <span id="visibilityValue">N/A</span>
-                                <div class="metric-badge" id="visibilityBadge">Unknown</div>
-                            </div>
-                        </div>
-
-                        <div class="widget" id="widgetWeatherScore">
-                            <h4>Weather Score</h4>
-                            <div class="widget-content">
-                                <div class="score-ring">
-                                    <span id="weatherScoreValue">--</span>
-                                </div>
-                                <div class="metric-badge" id="weatherScoreBadge">Calculating</div>
-                            </div>
-                        </div>
-
-                        <div class="widget" id="widgetTfr">
-                            <h4>TFR/Restricted Areas</h4>
-                            <div class="widget-content">
-                                <span id="tfrStatus">Checking...</span>
-                                <div class="metric-badge" id="tfrBadge">Unknown</div>
-                            </div>
-                        </div>
-
-                        <div class="widget" id="widgetWind">
-                            <h4>Wind Conditions</h4>
-                            <div class="widget-content">
-                                <div>Direction: <span id="windDirection">N/A</span></div>
-                                <div>Speed: <span id="windSpeed">N/A</span></div>
-                                <div>Gusts: <span id="windGusts">N/A</span></div>
-                                <div class="metric-badge" id="windBadge">Unknown</div>
+                        
+                        <!-- Attention Category -->
+                        <div class="summary-category" id="attentionCategory" style="display: none;">
+                            <h4 class="category-title">⚠️ Attention</h4>
+                            <div class="category-content" id="attentionContent">
+                                <div class="loading">Analyzing attention items...</div>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Professional Widgets Section -->
+                    <div class="widgets-container">
+                        <div class="widget">
+                            <div class="widget-title">
+                                <span>👁️</span>
+                                Visibility
+                            </div>
+                            <div class="widget-value" id="visibilityValue">10+ miles</div>
+                            <div class="widget-description">Current visibility conditions</div>
+                        </div>
+                        
+                        <div class="widget">
+                            <div class="widget-title">
+                                <span>📊</span>
+                                Weather Score
+                            </div>
+                            <div class="widget-value" id="weatherScoreValue">85%</div>
+                            <div class="widget-description">Overall weather quality</div>
+                        </div>
+                        
+                        <div class="widget">
+                            <div class="widget-title">
+                                <span>🚫</span>
+                                TFR Status
+                            </div>
+                            <div class="widget-value" id="tfrValue">Clear</div>
+                            <div class="widget-description">Temporary flight restrictions</div>
+                        </div>
+                        
+                        <div class="widget">
+                            <div class="widget-title">
+                                <span>💨</span>
+                                Wind Conditions
+                            </div>
+                            <div class="widget-value" id="windConditionsValue">10kt NE</div>
+                            <div class="widget-description">Current wind conditions</div>
+                        </div>
+                    </div>
+
+            <!-- Takeoff and Landing Weather Conditions Section -->
+            <div class="current-weather-section">
+                <div class="current-weather-title">Takeoff and Landing Weather Conditions</div>
+                <div class="current-weather-content" id="currentWeatherContent">
+                    <!-- Takeoff and landing weather data will be displayed here -->
+                </div>
+            </div>
                     
-                    <!-- Flight Information -->
+                    
+                    <!-- Enhanced Flight Information -->
                     <div class="flight-info-section">
-                        <h3>Flight Information</h3>
-                        <div class="flight-info-grid">
-                            <div class="info-item">
-                                <span>Total Distance:</span>
-                                <span id="totalDistance">Calculating...</span>
-                            </div>
-                            <div class="info-item">
-                                <span>Estimated Flight Time:</span>
-                                <span id="flightTime">Calculating...</span>
-                            </div>
-                            <div class="info-item">
-                                <span>Weather Status:</span>
-                                <span id="weatherStatus">Analyzing...</span>
-                            </div>
-                            <div class="info-item">
-                                <span>Route Complexity:</span>
-                                <span id="routeComplexity">Evaluating...</span>
-                            </div>
-                            <div class="info-item">
-                                <span>Last Updated:</span>
-                                <span id="lastUpdated">Just now</span>
-                            </div>
-                        </div>
+                        <div class="flight-info-title">Flight Information</div>
+                        <table class="flight-info-table" id="flightInfoTable">
+                            <thead>
+                                <tr>
+                                    <th>Parameter</th>
+                                    <th>Value</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="flight-info-label">Route</td>
+                                    <td class="flight-info-value" id="flightRoute">KJFK → EDDF</td>
+                                    <td><span class="flight-info-status good">Active</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Total Distance</td>
+                                    <td class="flight-info-value" id="totalDistance">Calculating...</td>
+                                    <td><span class="flight-info-status unknown">Calculating</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Estimated Flight Time</td>
+                                    <td class="flight-info-value" id="flightTime">Calculating...</td>
+                                    <td><span class="flight-info-status unknown">Calculating</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Weather Status</td>
+                                    <td class="flight-info-value" id="weatherStatus">Analyzing...</td>
+                                    <td><span class="flight-info-status unknown">Analyzing</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Departure Airport</td>
+                                    <td class="flight-info-value" id="departureAirport">KJFK - New York</td>
+                                    <td><span class="flight-info-status good">Ready</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Arrival Airport</td>
+                                    <td class="flight-info-value" id="arrivalAirport">EDDF - Frankfurt</td>
+                                    <td><span class="flight-info-status good">Ready</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Flight Level</td>
+                                    <td class="flight-info-value" id="flightLevel">FL350</td>
+                                    <td><span class="flight-info-status good">Optimal</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="flight-info-label">Aircraft Type</td>
+                                    <td class="flight-info-value" id="aircraftType">Commercial</td>
+                                    <td><span class="flight-info-status good">Standard</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -195,6 +240,19 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Explanation Modal -->
+    <div id="explanationModal" class="explanation-modal">
+        <div class="explanation-content">
+            <div class="explanation-header">
+                <h2 class="explanation-title" id="explanationTitle">Detailed Weather Analysis</h2>
+                <button class="close-modal" onclick="closeExplanationModal()">&times;</button>
+            </div>
+            <div class="explanation-body" id="explanationBody">
+                <!-- Detailed explanation content will be loaded here -->
             </div>
         </div>
     </div>
