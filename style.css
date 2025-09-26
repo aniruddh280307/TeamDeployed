@@ -973,6 +973,54 @@ h1, h2, h3, h4, h5, h6 {
     clear: both;
 }
 
+/* Weather Briefing Title */
+.weather-briefing-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e40af;
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    border-bottom: 3px solid #10b981;
+}
+
+/* Category Headers for Weather Briefing */
+.category-header {
+    font-size: 16px;
+    font-weight: 700;
+    text-align: center;
+    margin: 20px 0 10px 0;
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.overview-header {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.attention-header {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* Category-specific bullet styling */
+.overview-bullet {
+    border-left: 4px solid #10b981;
+    background: rgba(16, 185, 129, 0.05);
+}
+
+.attention-bullet {
+    border-left: 4px solid #ef4444;
+    background: rgba(239, 68, 68, 0.05);
+}
+
 /* Enhanced Overview and Attention Headings */
 .overview-heading, .attention-heading {
     font-size: 18px;

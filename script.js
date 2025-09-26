@@ -510,7 +510,72 @@ function formatSummaryText(text) {
         .join('');
 }
 
-// Format weather briefing summary with enhanced headings
+// Format weather briefing summary in original format with categories
+function formatOriginalWeatherBriefing(text) {
+    if (!text) return '<div class="no-data">No weather briefing summary available</div>';
+    
+    // Split the text into lines and process each line
+    const lines = text.split('\n').filter(line => line.trim());
+    let html = '';
+    let currentCategory = '';
+    
+    for (const line of lines) {
+        // Handle main title
+        if (line.includes('🌤️ WEATHER BRIEFING SUMMARY')) {
+            html += `<div class="weather-briefing-title">${line}</div>`;
+        }
+        // Handle Overview category
+        else if (line.includes('📊 OVERVIEW:')) {
+            currentCategory = 'overview';
+            html += `<div class="category-header overview-header">📊 OVERVIEW</div>`;
+        }
+        // Handle Attention category
+        else if (line.includes('⚠️ ATTENTION:')) {
+            currentCategory = 'attention';
+            html += `<div class="category-header attention-header">⚠️ ATTENTION</div>`;
+        }
+        // Handle bullet points with tags and "See why" links
+        else if (line.startsWith('•')) {
+            // Extract the main content, tags, and "See why" link
+            const content = line.replace(/<[^>]*>/g, ''); // Remove HTML tags for processing
+            const hasTags = line.includes('<span class="tag');
+            const hasSeeWhy = line.includes('<a href="#" class="see-why"');
+            
+            let bulletHtml = `<div class="summary-bullet ${currentCategory}-bullet">`;
+            bulletHtml += content;
+            
+            // Add tags and "See why" link if they exist in the original line
+            if (hasTags || hasSeeWhy) {
+                // Extract the HTML parts from the original line
+                const tagMatch = line.match(/<span class="tag[^"]*"[^>]*>([^<]*)<\/span>/);
+                const seeWhyMatch = line.match(/<a href="#" class="see-why"[^>]*>([^<]*)<\/a>/);
+                
+                if (tagMatch) {
+                    bulletHtml += ` <span class="tag ${tagMatch[1].toLowerCase().replace(/\s+/g, '-')}">${tagMatch[1]}</span>`;
+                }
+                if (seeWhyMatch) {
+                    // Extract data attributes for the "See why" link
+                    const dataStation = line.match(/data-station="([^"]*)"/);
+                    const dataType = line.match(/data-type="([^"]*)"/);
+                    const dataAttrs = dataStation && dataType ? 
+                        `data-station="${dataStation[1]}" data-type="${dataType[1]}"` : '';
+                    bulletHtml += ` <a href="#" class="see-why" ${dataAttrs}>See why</a>`;
+                }
+            }
+            
+            bulletHtml += '</div>';
+            html += bulletHtml;
+        }
+        // Handle other content
+        else {
+            html += `<div class="summary-text">${line}</div>`;
+        }
+    }
+    
+    return html;
+}
+
+// Format weather briefing summary with enhanced headings (legacy function)
 function formatWeatherBriefing(text) {
     if (!text) return '<div class="no-data">No weather briefing summary available</div>';
     
@@ -1025,12 +1090,12 @@ function displaySummaryPoints(points) {
     summaryPoints.style.display = 'block';
     
     if (Array.isArray(points) && points.length > 0) {
-        // Display weather briefing summary with enhanced headings
+        // Display weather briefing summary in original format
         const weatherBriefing = points[0];
-        summaryPoints.innerHTML = formatWeatherBriefing(weatherBriefing);
+        summaryPoints.innerHTML = formatOriginalWeatherBriefing(weatherBriefing);
     } else if (typeof points === 'string') {
         // Single string format
-        summaryPoints.innerHTML = formatWeatherBriefing(points);
+        summaryPoints.innerHTML = formatOriginalWeatherBriefing(points);
     } else {
         // Fallback
         summaryPoints.innerHTML = '<div class="no-data">No weather briefing summary available</div>';
