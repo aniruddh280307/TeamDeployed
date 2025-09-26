@@ -455,7 +455,6 @@ function generateManualSummary(weatherData) {
   
   // CONCISE WEATHER BRIEFING (5-6 lines only)
   weatherBriefing.push('🌤️ WEATHER BRIEFING SUMMARY');
-  weatherBriefing.push('='.repeat(40));
   
   // Overview Category (METAR, TAF, PIREP)
   weatherBriefing.push('\n📊 OVERVIEW:');
