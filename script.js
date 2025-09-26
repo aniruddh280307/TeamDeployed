@@ -698,25 +698,53 @@ function updateProfessionalWidgets(weatherData) {
     // Update Visibility Widget
     if (weatherData.metar && weatherData.metar.length > 0) {
         const metar = weatherData.metar[0];
-        const visibility = metar.vis || 0;
-        const visibilityText = visibility >= 10 ? '10+ miles' : `${visibility} miles`;
+        const visibility = metar.visib || 'N/A';
+        let visibilityText = 'N/A';
+        
+        console.log('🔍 Visibility widget debug:', { visibility, metar: metar.icaoId });
+        
+        if (visibility === '10+') {
+            visibilityText = '10+ miles';
+        } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+            visibilityText = visibility;
+        } else if (typeof visibility === 'number') {
+            visibilityText = visibility >= 10 ? '10+ miles' : `${visibility} miles`;
+        }
+        
+        console.log('🔍 Visibility text:', visibilityText);
+        
         const visibilityElement = document.getElementById('visibilityValue');
         if (visibilityElement) {
             visibilityElement.textContent = visibilityText;
+            console.log('✅ Visibility widget updated:', visibilityText);
+        } else {
+            console.error('❌ Visibility element not found!');
         }
+    } else {
+        console.log('❌ No METAR data available for visibility widget');
     }
     
     // Update Weather Score Widget
     let weatherScore = 85; // Default score
     if (weatherData.metar && weatherData.metar.length > 0) {
         const metar = weatherData.metar[0];
-        const visibility = metar.vis || 0;
-        const windSpeed = metar.windSpeed || 0;
+        const visibility = metar.visib || 'N/A';
+        const windSpeed = metar.wspd || 0;
         
         // Calculate weather score based on conditions
-        if (visibility >= 10 && windSpeed < 20) weatherScore = 95;
-        else if (visibility >= 5 && windSpeed < 30) weatherScore = 80;
-        else if (visibility >= 3 && windSpeed < 40) weatherScore = 65;
+        let visibilityValue = 0;
+        if (visibility === '10+') {
+            visibilityValue = 10;
+        } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+            const match = visibility.match(/(\d+(?:\.\d+)?)/);
+            visibilityValue = match ? parseFloat(match[1]) : 0;
+        } else if (typeof visibility === 'number') {
+            visibilityValue = visibility;
+        }
+        
+        if (visibilityValue >= 10 && windSpeed < 20) weatherScore = 95;
+        else if (visibilityValue >= 5 && windSpeed < 30) weatherScore = 80;
+        else if (visibilityValue >= 3 && windSpeed < 40) weatherScore = 65;
         else weatherScore = 45;
     }
     
@@ -1057,14 +1085,14 @@ function decodeMETAR(metar) {
     const windDir = metar.windDir || 0;
     const windSpeed = metar.windSpeed || 0;
     const windGust = metar.windGust || 0;
-    const visibility = metar.vis || 0;
+    const visibility = metar.visib || 'N/A';
     const temperature = metar.temp || 0;
     const dewPoint = metar.dewp || 0;
     const pressure = metar.altim || 0;
     
     return {
         wind: windDir && windSpeed ? `${getWindDirection(windDir)} at ${windSpeed} kts${windGust ? `, gusts ${windGust} kts` : ''}` : 'No wind data',
-        visibility: visibility ? `${visibility} miles` : 'No visibility data',
+        visibility: visibility && visibility !== 'N/A' ? `${visibility}` : 'No visibility data',
         temperature: temperature ? `${temperature}°C (dew point: ${dewPoint}°C)` : 'No temperature data',
         pressure: pressure ? `${pressure} hPa` : 'No pressure data'
     };
@@ -1111,6 +1139,11 @@ function displaySummaryPoints(points) {
 // Enhanced function to update all dashboard components
 function updateDashboardComponents(weatherData, stations) {
     console.log('🚀 Updating all dashboard components with data:', weatherData);
+    console.log('🔍 Weather data structure:', {
+        hasMetar: !!(weatherData.metar && weatherData.metar.length > 0),
+        metarCount: weatherData.metar ? weatherData.metar.length : 0,
+        firstMetar: weatherData.metar && weatherData.metar.length > 0 ? weatherData.metar[0] : null
+    });
     
     // Update professional widgets
     updateProfessionalWidgets(weatherData);
@@ -1226,10 +1259,20 @@ function analyzeWeatherStatus(weatherData) {
     let totalConditions = 0;
     
     weatherData.metar.forEach(metar => {
-        const visibility = metar.vis || 0;
-        const windSpeed = metar.windSpeed || 0;
+        const visibility = metar.visib || 'N/A';
+        const windSpeed = metar.wspd || 0;
         
-        if (visibility >= 5 && windSpeed < 30) {
+        let visibilityValue = 0;
+        if (visibility === '10+') {
+            visibilityValue = 10;
+        } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+            const match = visibility.match(/(\d+(?:\.\d+)?)/);
+            visibilityValue = match ? parseFloat(match[1]) : 0;
+        } else if (typeof visibility === 'number') {
+            visibilityValue = visibility;
+        }
+        
+        if (visibilityValue >= 5 && windSpeed < 30) {
             goodConditions++;
         }
         totalConditions++;
@@ -1545,7 +1588,7 @@ function formatTechnicalData(data, dataType) {
                     <span class="data-label">Station:</span> ${metar.stationId || 'N/A'}<br>
                     <span class="data-label">Temperature:</span> ${metar.temp ? `${metar.temp}°C` : 'N/A'}<br>
                     <span class="data-label">Wind:</span> ${metar.wdir ? `${metar.wdir}°` : 'N/A'} ${metar.wspd ? `${metar.wspd}kt` : ''} ${metar.wgst ? `G${metar.wgst}` : ''}<br>
-                    <span class="data-label">Visibility:</span> ${metar.vis ? `${metar.vis} SM` : 'N/A'}<br>
+                    <span class="data-label">Visibility:</span> ${metar.visib ? `${metar.visib}` : 'N/A'}<br>
                     <span class="data-label">Raw METAR:</span> ${metar.rawOb || 'N/A'}<br>
                 </div>
             `;
@@ -1637,8 +1680,8 @@ async function getVisibilityFromMetarTaf(icaoCode) {
         
         if (metarData && Array.isArray(metarData) && metarData.length > 0) {
             const metar = metarData[0];
-            if (metar.visibility) {
-                return normalizeVisibility(metar.visibility);
+            if (metar.visib) {
+                return normalizeVisibility(metar.visib);
             }
         }
         
@@ -1906,11 +1949,11 @@ function parseMetarData(metarData) {
     
     // Extract visibility
     let visibility = 'N/A';
-    if (metar.vis && metar.vis !== null) {
-        if (metar.vis >= 10) {
+    if (metar.visib && metar.visib !== null) {
+        if (metar.visib === '10+') {
             visibility = '10+ SM';
         } else {
-            visibility = `${metar.vis} SM`;
+            visibility = `${metar.visib}`;
         }
     } else if (metar.rawOb) {
         // Try to parse visibility from raw METAR
@@ -2035,8 +2078,8 @@ async function updateVisibilityWidget(data) {
         // Try METAR first (current conditions)
         if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
             const metar = data.metar[0];
-            if (metar.vis !== null && metar.vis !== undefined) {
-                visibility = normalizeVisibility(metar.vis);
+            if (metar.visib !== null && metar.visib !== undefined) {
+                visibility = normalizeVisibility(metar.visib);
             }
         }
         
@@ -2079,8 +2122,8 @@ async function updateWeatherScoreWidget(data) {
         // Get visibility data
         if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
             const metar = data.metar[0];
-            if (metar.vis !== null && metar.vis !== undefined) {
-                const visData = normalizeVisibility(metar.vis);
+            if (metar.visib !== null && metar.visib !== undefined) {
+                const visData = normalizeVisibility(metar.visib);
                 visKm = visData.km;
             }
         }
@@ -2245,23 +2288,28 @@ function normalizeVisibility(raw) {
     if (typeof raw === 'number') {
         km = raw > 100 ? raw / 1000 : raw; // if meters, convert
     } else if (typeof raw === 'string') {
-        // METAR format: "10SM", "6SM", "9999" (meters), "1/2SM"
-        const smMatch = raw.match(/([0-9]+(?:\/[0-9]+)?)\s*SM/i);
-        const meterMatch = raw.match(/^([0-9]+)$/);
-        const fractionMatch = raw.match(/([0-9]+)\/([0-9]+)\s*SM/i);
-        
-        if (fractionMatch) {
-            const numerator = parseInt(fractionMatch[1]);
-            const denominator = parseInt(fractionMatch[2]);
-            km = (numerator / denominator) * 1.60934;
-        } else if (smMatch) {
-            km = parseFloat(smMatch[1]) * 1.60934;
-        } else if (meterMatch) {
-            km = parseInt(meterMatch[1], 10) / 1000;
+        // Handle special cases first
+        if (raw === '10+') {
+            km = 10 * 1.60934; // 10+ miles = 16+ km
+        } else {
+            // METAR format: "10SM", "6SM", "9999" (meters), "1/2SM"
+            const smMatch = raw.match(/([0-9]+(?:\/[0-9]+)?)\s*SM/i);
+            const meterMatch = raw.match(/^([0-9]+)$/);
+            const fractionMatch = raw.match(/([0-9]+)\/([0-9]+)\s*SM/i);
+            
+            if (fractionMatch) {
+                const numerator = parseInt(fractionMatch[1]);
+                const denominator = parseInt(fractionMatch[2]);
+                km = (numerator / denominator) * 1.60934;
+            } else if (smMatch) {
+                km = parseFloat(smMatch[1]) * 1.60934;
+            } else if (meterMatch) {
+                km = parseInt(meterMatch[1], 10) / 1000;
+            }
         }
     }
     
-    const display = km == null ? 'N/A' : `${km.toFixed(1)} km`;
+    const display = km == null ? 'N/A' : raw === '10+' ? '10+ miles' : `${km.toFixed(1)} km`;
     const badge = km == null ? 'unknown' : km >= 8 ? 'good' : km >= 5 ? 'moderate' : 'poor';
     return { display, km, badge };
 }
@@ -2378,32 +2426,92 @@ async function performSearch(query) {
     resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Searching aviation weather data...</p>';
     
     try {
-        // Search across multiple aviation APIs
-        const searchResults = await searchAviationData(query);
+        // Use backend search API for comprehensive results
+        const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}/search?query=${encodeURIComponent(query)}`);
         
-        if (searchResults && searchResults.length > 0) {
-            resultsContainer.innerHTML = '';
-            
-            searchResults.forEach(result => {
-                const resultElement = document.createElement('div');
-                resultElement.className = 'result-item';
-                resultElement.innerHTML = `
-                    <h4>${result.title}</h4>
-                    <p>${result.description}</p>
-                    <div class="result-meta">
-                        <span class="result-source">${result.source}</span>
-                        <span class="result-time">${result.time}</span>
-                    </div>
-                `;
-                resultsContainer.appendChild(resultElement);
-            });
-        } else {
-            resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">No aviation weather data found for your search</p>';
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
+        const searchData = await response.json();
+        
+        if (searchData.results && searchData.results.length > 0) {
+            resultsContainer.innerHTML = '';
+            
+            // Display search results with enhanced formatting
+            searchData.results.forEach(result => {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'result-item';
+                
+                // Enhanced result display with decoded METAR and raw data
+                let resultHTML = `
+                    <div class="result-header">
+                        <h4>${result.title}</h4>
+                        <span class="result-type-badge ${result.type.toLowerCase()}">${result.type}</span>
+                    </div>
+                    <div class="result-content">
+                        <div class="decoded-metar">
+                            <h5>📋 Decoded METAR Report</h5>
+                            <pre class="metar-decoded-content">${result.content}</pre>
+                        </div>
+                `;
+                
+                // Add raw METAR data if available
+                if (result.rawMetar) {
+                    resultHTML += `
+                        <div class="raw-metar">
+                            <h5>📄 Raw METAR Data</h5>
+                            <pre class="metar-raw-content">${result.rawMetar}</pre>
+                        </div>
+                    `;
+                }
+                
+                resultHTML += `
+                        <div class="result-meta">
+                            <span class="result-source">${result.type}</span>
+                            <span class="result-time">${new Date(result.timestamp * 1000).toLocaleString()}</span>
+                        </div>
+                    </div>
+                `;
+                
+                resultElement.innerHTML = resultHTML;
+                resultsContainer.appendChild(resultElement);
+            });
+            
+            // Add search summary
+            const summaryElement = document.createElement('div');
+            summaryElement.className = 'search-summary';
+            summaryElement.innerHTML = `
+                <p>Found ${searchData.results.length} result(s) for "${query}"</p>
+            `;
+            resultsContainer.insertBefore(summaryElement, resultsContainer.firstChild);
+            
+        } else {
+            resultsContainer.innerHTML = `
+                <div class="no-results">
+                    <h3>No Results Found</h3>
+                    <p>No aviation weather data found for "${query}"</p>
+                    <div class="search-suggestions">
+                        <h4>Try searching for:</h4>
+                        <ul>
+                            <li>Weather conditions: "humidity", "temperature", "wind", "visibility"</li>
+                            <li>Airport codes: "KJFK", "EGLL", "LFPG"</li>
+                            <li>Weather phenomena: "thunderstorm", "fog", "turbulence"</li>
+                            <li>Flight conditions: "VFR", "IFR", "MVFR"</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
     } catch (error) {
-        console.error('Search failed:', error);
-        resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Search unavailable. Please try again later.</p>';
+        console.error('Search error:', error);
+        resultsContainer.innerHTML = `
+            <div class="search-error">
+                <h3>Search Unavailable</h3>
+                <p>Unable to search aviation weather data. Please try again later.</p>
+                <p><small>Error: ${error.message}</small></p>
+            </div>
+        `;
     }
 }
 

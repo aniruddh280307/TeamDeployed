@@ -718,10 +718,10 @@ app.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'Query parameter is required and must be at least 2 characters' });
     }
 
-    const searchResults = await aviationAPI.searchWeatherData(query, {
-      metarHours: 2,
-      pirepHours: 6
-    });
+    console.log(`🔍 Enhanced search for: "${query}"`);
+
+    // Enhanced search with intelligent query mapping
+    const searchResults = await performEnhancedSearch(query);
 
     res.json(searchResults);
   } catch (error) {
@@ -729,6 +729,529 @@ app.get('/search', async (req, res) => {
     res.status(500).json({ error: 'Search failed', details: error.message });
   }
 });
+
+// Debug endpoint to test METAR data retrieval
+app.get('/debug/metar', async (req, res) => {
+  try {
+    console.log('🔍 Debug: Testing METAR data retrieval');
+    const metarData = await aviationAPI.getMETAR('', 6);
+    console.log(`🔍 Debug: METAR data received: ${metarData ? metarData.length : 0} records`);
+    
+    res.json({
+      success: true,
+      count: metarData ? metarData.length : 0,
+      sample: metarData ? metarData[0] : null,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug METAR error:', error);
+    res.status(500).json({ error: 'Debug failed', details: error.message });
+  }
+});
+
+// Enhanced search function with intelligent query mapping
+async function performEnhancedSearch(query) {
+  const queryLower = query.toLowerCase().trim();
+  const results = [];
+  
+  try {
+    // Map user queries to aviation weather fields
+    const queryMappings = {
+      // Weather conditions
+      'humidity': ['dewp', 'temp', 'humidity'],
+      'temperature': ['temp', 'dewp'],
+      'wind': ['wdir', 'wspd', 'wgst'],
+      'visibility': ['visib', 'visibility'],
+      'pressure': ['altim', 'slp', 'pressure'],
+      'clouds': ['clouds', 'cover', 'base'],
+      'weather': ['wxString', 'weather'],
+      
+      // Flight conditions
+      'vfr': ['fltCat'],
+      'ifr': ['fltCat'],
+      'mvfr': ['fltCat'],
+      
+      // Weather phenomena
+      'thunderstorm': ['wxString', 'rawOb'],
+      'fog': ['wxString', 'rawOb'],
+      'turbulence': ['rawOb', 'rawPirep'],
+      'icing': ['rawOb', 'rawPirep'],
+      'rain': ['wxString', 'rawOb'],
+      'snow': ['wxString', 'rawOb'],
+      'storm': ['wxString', 'rawOb']
+    };
+
+    // Determine search strategy based on query
+    let searchStrategy = 'comprehensive';
+    let searchFields = [];
+    
+    // Check if query matches known weather terms
+    for (const [term, fields] of Object.entries(queryMappings)) {
+      if (queryLower.includes(term)) {
+        searchStrategy = 'comprehensive'; // Use comprehensive search for better results
+        searchFields = fields;
+        break;
+      }
+    }
+
+    // Check if query is an ICAO code (only if it's exactly 4 uppercase letters)
+    if (/^[A-Z]{4}$/.test(query.toUpperCase()) && query.length === 4) {
+      searchStrategy = 'station';
+    }
+
+    console.log(`🎯 Search strategy: ${searchStrategy}, fields: ${searchFields.join(', ')}`);
+
+    // Execute search based on strategy
+    switch (searchStrategy) {
+      case 'station':
+        results.push(...await searchByStation(query.toUpperCase()));
+        break;
+      case 'targeted':
+        results.push(...await searchByFields(query, searchFields));
+        break;
+      default:
+        results.push(...await searchComprehensive(query));
+    }
+
+    // Remove duplicates and limit results
+    const uniqueResults = results.filter((result, index, self) => 
+      index === self.findIndex(r => r.title === result.title && r.content === result.content)
+    ).slice(0, 20);
+
+    return {
+      query,
+      results: uniqueResults,
+      total: uniqueResults.length,
+      strategy: searchStrategy,
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('Enhanced search error:', error);
+    return {
+      query,
+      results: [],
+      total: 0,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Search by specific station
+async function searchByStation(icaoCode) {
+  const results = [];
+  
+  try {
+    // Get comprehensive data for the station
+    const weatherData = await aviationAPI.getComprehensiveWeatherData(icaoCode, {
+      metarHours: 6,
+      tafHours: 12,
+      pirepHours: 12,
+      sigmetHours: 12
+    });
+
+    // Process METAR data
+    if (weatherData.metar && weatherData.metar.length > 0) {
+      weatherData.metar.forEach(metar => {
+        results.push({
+          title: `METAR - ${metar.icaoId}`,
+          content: metar.rawOb || 'No raw METAR available',
+          type: 'METAR',
+          timestamp: metar.obsTime || Date.now() / 1000
+        });
+      });
+    }
+
+    // Process TAF data
+    if (weatherData.taf && weatherData.taf.length > 0) {
+      weatherData.taf.forEach(taf => {
+        results.push({
+          title: `TAF - ${taf.icaoId}`,
+          content: taf.rawOb || 'No raw TAF available',
+          type: 'TAF',
+          timestamp: taf.issueTime || Date.now() / 1000
+        });
+      });
+    }
+
+    // Process PIREP data
+    if (weatherData.pirep && weatherData.pirep.length > 0) {
+      weatherData.pirep.forEach(pirep => {
+        results.push({
+          title: `PIREP - ${pirep.aircraftRef || 'Unknown'}`,
+          content: pirep.rawPirep || 'No raw PIREP available',
+          type: 'PIREP',
+          timestamp: pirep.obsTime || Date.now() / 1000
+        });
+      });
+    }
+
+    // Process SIGMET data
+    if (weatherData.sigmet && weatherData.sigmet.length > 0) {
+      weatherData.sigmet.forEach(sigmet => {
+        results.push({
+          title: `SIGMET - ${sigmet.hazard || 'Weather Alert'}`,
+          content: sigmet.rawSigmet || 'No raw SIGMET available',
+          type: 'SIGMET',
+          timestamp: sigmet.validTime || Date.now() / 1000
+        });
+      });
+    }
+
+  } catch (error) {
+    console.error(`Station search error for ${icaoCode}:`, error);
+  }
+
+  return results;
+}
+
+// Search by specific weather fields
+async function searchByFields(query, fields) {
+  const results = [];
+  
+  try {
+    // Get METAR data and search specific fields
+    const metarData = await aviationAPI.getMETAR('', 6);
+    console.log(`🔍 METAR data received: ${metarData ? metarData.length : 0} records`);
+    
+    if (metarData && Array.isArray(metarData)) {
+      metarData.forEach(metar => {
+        let found = false;
+        let relevantContent = '';
+
+        // Always include temperature and dew point for humidity queries
+        if (query.toLowerCase().includes('humidity') || query.toLowerCase().includes('temperature')) {
+          if (metar.temp !== null && metar.temp !== undefined) {
+            found = true;
+            relevantContent += `Temperature: ${metar.temp}°C `;
+          }
+          if (metar.dewp !== null && metar.dewp !== undefined) {
+            relevantContent += `Dew Point: ${metar.dewp}°C `;
+          }
+        }
+
+        // Include wind data for wind queries
+        if (query.toLowerCase().includes('wind')) {
+          if (metar.wdir !== null && metar.wdir !== undefined) {
+            found = true;
+            relevantContent += `Wind Direction: ${metar.wdir}° `;
+          }
+          if (metar.wspd !== null && metar.wspd !== undefined) {
+            relevantContent += `Wind Speed: ${metar.wspd} kts `;
+          }
+        }
+
+        // Include visibility for visibility queries
+        if (query.toLowerCase().includes('visibility')) {
+          if (metar.visib) {
+            found = true;
+            relevantContent += `Visibility: ${metar.visib} `;
+          }
+        }
+
+        // Include pressure for pressure queries
+        if (query.toLowerCase().includes('pressure')) {
+          if (metar.altim !== null && metar.altim !== undefined) {
+            found = true;
+            relevantContent += `Pressure: ${metar.altim} hPa `;
+          }
+        }
+
+        // Include weather conditions for weather queries
+        if (query.toLowerCase().includes('weather')) {
+          if (metar.wxString) {
+            found = true;
+            relevantContent += `Weather: ${metar.wxString} `;
+          }
+        }
+
+        // For general queries, show all available data
+        if (query.toLowerCase().includes('temperature') || query.toLowerCase().includes('humidity')) {
+          if (metar.temp !== null && metar.temp !== undefined) {
+            found = true;
+            relevantContent += `Temperature: ${metar.temp}°C `;
+          }
+          if (metar.dewp !== null && metar.dewp !== undefined) {
+            relevantContent += `Dew Point: ${metar.dewp}°C `;
+          }
+        }
+
+        if (found) {
+          results.push({
+            title: `METAR - ${metar.icaoId}`,
+            content: `${relevantContent.trim()} | Raw: ${metar.rawOb || 'N/A'}`,
+            type: 'METAR',
+            timestamp: metar.obsTime || Date.now() / 1000
+          });
+        }
+      });
+    }
+
+    console.log(`🔍 Field search results: ${results.length} found`);
+
+  } catch (error) {
+    console.error('Field search error:', error);
+  }
+
+  return results;
+}
+
+// Comprehensive search across all data types
+async function searchComprehensive(query) {
+  const results = [];
+  
+  try {
+    console.log(`🔍 Comprehensive search for: "${query}"`);
+    
+    // Get METAR data from major airports for comprehensive search
+    const majorAirports = ['KJFK', 'KLAX', 'KORD', 'KDFW', 'KATL', 'KLAS', 'KPHX', 'KMIA', 'KSEA', 'KBOS'];
+    const queryLower = query.toLowerCase();
+    
+    // Search in multiple airports
+    for (const airport of majorAirports) {
+      try {
+        const metarData = await aviationAPI.getMETAR(airport, 6);
+        console.log(`🔍 METAR data for ${airport}: ${metarData ? metarData.length : 0} records`);
+        
+        if (metarData && Array.isArray(metarData)) {
+          metarData.forEach(metar => {
+            // Search in raw METAR text
+            if (metar.rawOb && metar.rawOb.toLowerCase().includes(queryLower)) {
+              results.push({
+                title: `METAR - ${metar.icaoId}`,
+                content: metar.rawOb,
+                type: 'METAR',
+                timestamp: metar.obsTime || Date.now() / 1000
+              });
+            }
+            
+            // Search in specific fields based on query and always include decoded METAR
+            let shouldInclude = false;
+            let decodedContent = '';
+            
+            // Temperature search
+            if (queryLower.includes('temp') || queryLower.includes('humidity')) {
+              if (metar.temp !== null && metar.temp !== undefined) {
+                shouldInclude = true;
+                decodedContent += `Temperature: ${metar.temp}°C, Dew Point: ${metar.dewp}°C\n`;
+              }
+            }
+            
+            // Wind search
+            if (queryLower.includes('wind')) {
+              if (metar.wdir !== null && metar.wspd !== null) {
+                shouldInclude = true;
+                decodedContent += `Wind: ${metar.wdir}° at ${metar.wspd} kts`;
+                if (metar.wgst && metar.wgst > metar.wspd) {
+                  decodedContent += `, gusting to ${metar.wgst} kts`;
+                }
+                decodedContent += '\n';
+              }
+            }
+            
+            // Visibility search
+            if (queryLower.includes('visibility') || queryLower.includes('vis')) {
+              if (metar.visib) {
+                shouldInclude = true;
+                decodedContent += `Visibility: ${metar.visib}\n`;
+              }
+            }
+            
+            // Pressure search
+            if (queryLower.includes('pressure') || queryLower.includes('altim')) {
+              if (metar.altim !== null) {
+                shouldInclude = true;
+                decodedContent += `Pressure: ${metar.altim} hPa\n`;
+              }
+            }
+            
+            // Weather conditions search
+            if (queryLower.includes('weather') || queryLower.includes('conditions')) {
+              if (metar.wxString) {
+                shouldInclude = true;
+                decodedContent += `Weather: ${metar.wxString}\n`;
+              }
+            }
+            
+            // Flight category search
+            if (queryLower.includes('vfr') || queryLower.includes('ifr') || queryLower.includes('mvfr')) {
+              if (metar.fltCat) {
+                shouldInclude = true;
+                decodedContent += `Flight Category: ${metar.fltCat}\n`;
+              }
+            }
+            
+            // For any search, include comprehensive decoded METAR
+            if (shouldInclude || queryLower.length >= 3) {
+              // Create comprehensive decoded METAR
+              const decodedMetar = decodeMetarForSearch(metar);
+              
+              results.push({
+                title: `METAR Report - ${metar.icaoId}`,
+                content: decodedMetar,
+                rawMetar: metar.rawOb || 'No raw METAR available',
+                type: 'METAR',
+                timestamp: metar.obsTime || Date.now() / 1000,
+                station: metar.icaoId,
+                airportName: metar.name || 'Unknown Airport'
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.log(`Error searching ${airport}:`, error.message);
+      }
+    }
+
+    console.log(`🔍 Comprehensive search results: ${results.length} found`);
+
+  } catch (error) {
+    console.error('Comprehensive search error:', error);
+  }
+
+  return results;
+}
+
+// Enhanced METAR decoder for search results
+function decodeMetarForSearch(metarData) {
+  try {
+    const stationId = metarData.icaoId || 'Unknown';
+    const stationName = metarData.name || 'Unknown Airport';
+    const reportTime = metarData.obsTime || 0;
+    
+    // Convert timestamp to readable format
+    let timeStr = 'Unknown time';
+    if (reportTime) {
+      const dt = new Date(reportTime * 1000);
+      timeStr = dt.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      }) + ' at ' + dt.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }) + ' UTC';
+    }
+    
+    let decodedContent = `📍 ${stationName} (${stationId})\n`;
+    decodedContent += `🕐 Report Time: ${timeStr}\n\n`;
+    
+    // Temperature and Dew Point
+    if (metarData.temp !== null && metarData.temp !== undefined) {
+      const tempC = Math.round(metarData.temp);
+      const dewpC = metarData.dewp !== null && metarData.dewp !== undefined ? Math.round(metarData.dewp) : null;
+      
+      decodedContent += `🌡️ Temperature: ${tempC}°C`;
+      if (dewpC !== null) {
+        decodedContent += `, Dew Point: ${dewpC}°C`;
+      }
+      decodedContent += '\n';
+    }
+    
+    // Wind Information
+    if (metarData.wdir !== null && metarData.wdir !== undefined && metarData.wspd !== null && metarData.wspd !== undefined) {
+      const compassDirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 
+                          'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+      const dirIndex = Math.round((metarData.wdir + 11.25) / 22.5) % 16;
+      const compassDir = compassDirs[dirIndex];
+      
+      decodedContent += `💨 Wind: ${metarData.wdir}° (${compassDir}) at ${metarData.wspd} kts`;
+      if (metarData.wgst && metarData.wgst > metarData.wspd) {
+        decodedContent += `, gusting to ${metarData.wgst} kts`;
+      }
+      decodedContent += '\n';
+    }
+    
+    // Visibility
+    if (metarData.visib) {
+      let visDesc = metarData.visib;
+      if (metarData.visib === '10+') {
+        visDesc = '10+ miles (excellent)';
+      } else if (metarData.visib.endsWith('SM')) {
+        const miles = metarData.visib.slice(0, -2);
+        if (miles !== '10+') {
+          const milesFloat = parseFloat(miles);
+          const km = milesFloat * 1.609;
+          visDesc = `${miles} miles (${km.toFixed(1)} km)`;
+        }
+      }
+      decodedContent += `👁️ Visibility: ${visDesc}\n`;
+    }
+    
+    // Clouds
+    if (metarData.clouds && metarData.clouds.length > 0) {
+      decodedContent += `☁️ Clouds: `;
+      const cloudDescriptions = [];
+      for (const cloud of metarData.clouds) {
+        const cover = cloud.cover || '';
+        const base = cloud.base || 0;
+        
+        const coverMap = {
+          'CLR': 'Clear',
+          'FEW': 'Few clouds',
+          'SCT': 'Scattered clouds',
+          'BKN': 'Broken clouds',
+          'OVC': 'Overcast'
+        };
+        
+        const coverDesc = coverMap[cover] || cover;
+        const baseFt = Math.round(base);
+        const baseDesc = baseFt > 0 ? `at ${baseFt} feet` : '';
+        
+        cloudDescriptions.push(`${coverDesc} ${baseDesc}`.trim());
+      }
+      decodedContent += cloudDescriptions.join(', ') + '\n';
+    }
+    
+    // Pressure
+    if (metarData.altim !== null && metarData.altim !== undefined) {
+      decodedContent += `📊 Pressure: ${metarData.altim.toFixed(1)} hPa\n`;
+    }
+    
+    // Weather Conditions
+    if (metarData.wxString) {
+      const weatherMap = {
+        'RA': 'Rain', 'SN': 'Snow', 'FG': 'Fog', 'HZ': 'Haze', 'BR': 'Mist',
+        'TS': 'Thunderstorm', 'SH': 'Showers', 'DZ': 'Drizzle', 'GR': 'Hail',
+        'GS': 'Small hail', 'FU': 'Smoke', 'DU': 'Dust', 'SA': 'Sand',
+        'VA': 'Volcanic ash', 'SQ': 'Squalls', 'FC': 'Funnel cloud',
+        'SS': 'Sandstorm', 'DS': 'Duststorm'
+      };
+      
+      const conditions = [];
+      for (const code of metarData.wxString.split(' ')) {
+        if (weatherMap[code]) {
+          conditions.push(weatherMap[code]);
+        } else {
+          conditions.push(code);
+        }
+      }
+      
+      if (conditions.length > 0) {
+        decodedContent += `🌦️ Weather: ${conditions.join(', ')}\n`;
+      }
+    }
+    
+    // Flight Category
+    if (metarData.fltCat) {
+      const categoryEmoji = {
+        'VFR': '🟢',
+        'MVFR': '🟡', 
+        'IFR': '🔴',
+        'LIFR': '🟣'
+      };
+      const emoji = categoryEmoji[metarData.fltCat] || '⚪';
+      decodedContent += `${emoji} Flight Category: ${metarData.fltCat}\n`;
+    }
+    
+    return decodedContent.trim();
+    
+  } catch (error) {
+    return `Error decoding METAR: ${error.message}`;
+  }
+}
 
 app.get('/weather/:icao', async (req, res) => {
   try {

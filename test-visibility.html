@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visibility Widget Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .widget {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            backdrop-filter: blur(10px);
+        }
+        .widget-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success { background: rgba(76, 175, 80, 0.3); }
+        .error { background: rgba(244, 67, 54, 0.3); }
+    </style>
+</head>
+<body>
+    <h1>🔍 Visibility Widget Test</h1>
+    
+    <div class="widget">
+        <h3>👁️ Visibility Widget</h3>
+        <div class="widget-value" id="visibilityValue">Loading...</div>
+        <div>Current visibility conditions</div>
+    </div>
+    
+    <div class="widget">
+        <h3>📊 Weather Score Widget</h3>
+        <div class="widget-value" id="weatherScoreValue">Loading...</div>
+        <div>Overall weather quality</div>
+    </div>
+    
+    <button onclick="testVisibilityWidget()">Test Visibility Widget</button>
+    <button onclick="testWeatherScore()">Test Weather Score</button>
+    <button onclick="testAPI()">Test API Connection</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        const BACKEND_API_CONFIG = {
+            baseUrl: 'http://localhost:3001'
+        };
+        
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        async function testAPI() {
+            try {
+                showStatus('Testing API connection...', 'success');
+                const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}/health`);
+                const data = await response.json();
+                showStatus(`✅ API Connected: ${data.status}`, 'success');
+            } catch (error) {
+                showStatus(`❌ API Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testVisibilityWidget() {
+            try {
+                showStatus('Testing visibility widget...', 'success');
+                
+                // Get weather data
+                const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}/weather/KJFK`);
+                const weatherData = await response.json();
+                
+                if (weatherData && weatherData.length > 0) {
+                    const metar = weatherData[0];
+                    const visibility = metar.visib || 'N/A';
+                    let visibilityText = 'N/A';
+                    
+                    if (visibility === '10+') {
+                        visibilityText = '10+ miles';
+                    } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+                        visibilityText = visibility;
+                    } else if (typeof visibility === 'number') {
+                        visibilityText = visibility >= 10 ? '10+ miles' : `${visibility} miles`;
+                    }
+                    
+                    document.getElementById('visibilityValue').textContent = visibilityText;
+                    showStatus(`✅ Visibility Widget Updated: ${visibilityText}`, 'success');
+                } else {
+                    showStatus('❌ No weather data received', 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Visibility Widget Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testWeatherScore() {
+            try {
+                showStatus('Testing weather score...', 'success');
+                
+                // Get weather data
+                const response = await fetch(`${BACKEND_API_CONFIG.baseUrl}/weather/KJFK`);
+                const weatherData = await response.json();
+                
+                if (weatherData && weatherData.length > 0) {
+                    const metar = weatherData[0];
+                    const visibility = metar.visib || 'N/A';
+                    const windSpeed = metar.wspd || 0;
+                    
+                    // Calculate weather score based on conditions
+                    let visibilityValue = 0;
+                    if (visibility === '10+') {
+                        visibilityValue = 10;
+                    } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+                        const match = visibility.match(/(\d+(?:\.\d+)?)/);
+                        visibilityValue = match ? parseFloat(match[1]) : 0;
+                    } else if (typeof visibility === 'number') {
+                        visibilityValue = visibility;
+                    }
+                    
+                    let weatherScore = 85; // Default score
+                    if (visibilityValue >= 10 && windSpeed < 20) weatherScore = 95;
+                    else if (visibilityValue >= 5 && windSpeed < 30) weatherScore = 80;
+                    else if (visibilityValue >= 3 && windSpeed < 40) weatherScore = 65;
+                    else weatherScore = 45;
+                    
+                    document.getElementById('weatherScoreValue').textContent = `${weatherScore}%`;
+                    showStatus(`✅ Weather Score Updated: ${weatherScore}% (Visibility: ${visibilityValue}, Wind: ${windSpeed} kts)`, 'success');
+                } else {
+                    showStatus('❌ No weather data received', 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Weather Score Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-test on page load
+        window.onload = function() {
+            testAPI();
+            setTimeout(() => {
+                testVisibilityWidget();
+                testWeatherScore();
+            }, 1000);
+        };
+    </script>
+</body>
+</html>

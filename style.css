@@ -973,6 +973,208 @@ h1, h2, h3, h4, h5, h6 {
     clear: both;
 }
 
+/* Enhanced Search Results Styling */
+.search-summary {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 600;
+    color: #1e40af;
+}
+
+.result-item {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #3b82f6;
+    transition: all 0.3s ease;
+}
+
+.result-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.result-header h4 {
+    color: #1e40af;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.result-type-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.result-type-badge.metar {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.result-type-badge.taf {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+}
+
+.result-type-badge.pirep {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.result-type-badge.sigmet {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.result-content {
+    color: #374151;
+}
+
+.result-description {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 10px;
+    border-radius: 6px;
+    border-left: 3px solid #3b82f6;
+}
+
+.result-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.result-source {
+    font-weight: 600;
+    color: #1e40af;
+}
+
+.result-time {
+    color: #6b7280;
+}
+
+/* No Results and Error States */
+.no-results, .search-error {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 30px;
+    text-align: center;
+    margin: 20px 0;
+}
+
+.no-results h3, .search-error h3 {
+    color: #1e40af;
+    margin-bottom: 15px;
+}
+
+.search-suggestions {
+    margin-top: 20px;
+    text-align: left;
+    background: rgba(59, 130, 246, 0.1);
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.search-suggestions h4 {
+    color: #1e40af;
+    margin-bottom: 10px;
+}
+
+.search-suggestions ul {
+    list-style: none;
+    padding: 0;
+}
+
+.search-suggestions li {
+    padding: 5px 0;
+    color: #374151;
+}
+
+.search-suggestions li:before {
+    content: "• ";
+    color: #3b82f6;
+    font-weight: bold;
+}
+
+/* Enhanced METAR Display Styles */
+.decoded-metar, .raw-metar {
+    margin: 15px 0;
+    padding: 15px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.decoded-metar h5, .raw-metar h5 {
+    color: #1e40af;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.metar-decoded-content, .metar-raw-content {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #374151;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 4px solid #3b82f6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+}
+
+.metar-raw-content {
+    border-left-color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    color: #065f46;
+}
+
+.decoded-metar {
+    border-left: 4px solid #3b82f6;
+}
+
+.raw-metar {
+    border-left: 4px solid #10b981;
+    margin-top: 10px;
+}
+
+/* Enhanced result item styling for METAR reports */
+.result-item.metar-enhanced {
+    border-left: 4px solid #3b82f6;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(255, 255, 255, 0.95));
+}
+
+.result-item.metar-enhanced:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 24px rgba(59, 130, 246, 0.15);
+}
+
 /* Weather Briefing Title */
 .weather-briefing-title {
     font-size: 20px;
