@@ -1,5 +1,5 @@
-# Flask backend for aviation data aggregation and AI prioritization
-# Requires: flask, flask-cors, httpx, python-dotenv, openai
+# FastAPI backend for aviation data aggregation and AI prioritization
+# Requires: fastapi, uvicorn, httpx, python-dotenv, openai
 # Environment variables: OPENAI_API_KEY
 
 from __future__ import annotations
@@ -8,8 +8,9 @@ import os
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import httpx
 
 # Optional: load .env if present
@@ -21,8 +22,26 @@ except Exception:
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-app = Flask(__name__)
-CORS(app)
+# Pydantic models for request/response
+class AviationQuery(BaseModel):
+	stations: Optional[str] = None
+	metar: Optional[Dict[str, Any]] = None
+	taf: Optional[Dict[str, Any]] = None
+	pirep: Optional[Dict[str, Any]] = None
+	sigmet: Optional[Dict[str, Any]] = None
+	afd: Optional[Dict[str, Any]] = None
+	stationinfo: Optional[Dict[str, Any]] = None
+
+app = FastAPI(title="Aviation Weather API", version="1.0.0")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure this properly for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 AVIATION_BASE = "https://aviationweather.gov/api/data"
 
@@ -160,12 +179,12 @@ async def openai_summarize(payload: Dict[str, Any]) -> List[str]:
 
 
 @app.get("/api/health")
-def health() -> Any:
+async def health() -> Dict[str, str]:
 	return {"status": "ok"}
 
 
 @app.post("/api/aviation/summary")
-async def aviation_summary() -> Any:
+async def aviation_summary(query: AviationQuery) -> Dict[str, Any]:
 	"""
 	Body (JSON) optional fields to scope queries (passed through to each endpoint unless overridden):
 	{
@@ -174,46 +193,47 @@ async def aviation_summary() -> Any:
 	}
 	"""
 	try:
-		query: Dict[str, Any] = request.get_json(silent=True) or {}
-		data = await gather_aviation_data(query)
+		query_dict = query.dict(exclude_none=True)
+		data = await gather_aviation_data(query_dict)
 		bullets = await openai_summarize(data)
-		return jsonify({
+		return {
 			"summary": bullets,
 			"errors": data.get("errors", {}),
 			"raw": {k: v for k, v in data.items() if k != "errors"}
-		})
+		}
 	except Exception as e:
-		return jsonify({"error": str(e)}), 500
+		raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/weather/<icao>")
-async def get_weather_for_icao(icao: str) -> Any:
+@app.get("/api/weather/{icao}")
+async def get_weather_for_icao(icao: str) -> Dict[str, Any]:
 	"""Get comprehensive weather data for a specific ICAO code"""
 	try:
 		query = {"stations": icao.upper()}
 		data = await gather_aviation_data(query)
-		return jsonify({
+		return {
 			"icao": icao.upper(),
 			"data": data,
 			"errors": data.get("errors", {})
-		})
+		}
 	except Exception as e:
-		return jsonify({"error": str(e)}), 500
+		raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/route/<path:route>")
-async def get_route_weather(route: str) -> Any:
+@app.get("/api/route/{route:path}")
+async def get_route_weather(route: str) -> Dict[str, Any]:
 	"""Get weather data for a route (comma-separated ICAO codes)"""
 	try:
 		icaos = [code.strip().upper() for code in route.split(',')]
 		query = {"stations": ','.join(icaos)}
 		data = await gather_aviation_data(query)
-		return jsonify({
+		return {
 			"route": icaos,
 			"data": data,
 			"errors": data.get("errors", {})
-		})
+		}
 	except Exception as e:
-		return jsonify({"error": str(e)}), 500
+		raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
-	app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+	import uvicorn
+	uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "5000")))

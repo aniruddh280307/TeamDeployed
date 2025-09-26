@@ -612,36 +612,85 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
-.summary-bullet.high {
-    border-left-color: #ef4444;
-    background: rgba(254, 226, 226, 0.8);
-}
-
-.summary-bullet.medium {
-    border-left-color: #f59e0b;
-    background: rgba(254, 243, 199, 0.8);
-}
-
-.summary-bullet.low {
-    border-left-color: #10b981;
-    background: rgba(220, 252, 231, 0.8);
-}
-
 .bullet-content {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
-}
-
-.priority-dot {
-    font-size: 1.1rem;
-    margin-top: 2px;
-    flex-shrink: 0;
 }
 
 .bullet-text {
     flex: 1;
     font-weight: 500;
+}
+
+/* Data Source Tags */
+.data-source-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 8px;
+    vertical-align: middle;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.data-source-tag.pilot-advice {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+    border: 1px solid #1e40af;
+}
+
+.data-source-tag.expert {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: 1px solid #047857;
+}
+
+
+.data-source-tag.alert {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    border: 1px solid #b91c1c;
+}
+
+/* Summary Sections */
+.summary-section {
+    margin-bottom: 25px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 10px;
+    padding: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.overview-title {
+    color: #1e40af;
+    border-bottom-color: #3b82f6;
+}
+
+.attention-title {
+    color: #dc2626;
+    border-bottom-color: #ef4444;
+}
+
+.section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .loading {

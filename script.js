@@ -360,7 +360,7 @@ async function loadAviationSummary() {
             </div>
         `;
         
-        // Fallback: Show sample aviation points
+        // Fallback: Show sample aviation points with various data sources
         setTimeout(() => {
             displaySummaryPoints([
                 "SIGMET: Convective activity over KJFK area - Severe turbulence and icing possible",
@@ -374,43 +374,143 @@ async function loadAviationSummary() {
     }
 }
 
-// Display summary points with simple bullet points and red priority indicators
+// Function to categorize data source
+function categorizeDataSource(point) {
+    const pointLower = point.toLowerCase();
+    
+    // Overview category: SIGMET, METAR, TAF, PIREP
+    if (pointLower.includes('sigmet') || pointLower.includes('significant weather') ||
+        pointLower.includes('metar') || pointLower.includes('current weather') || pointLower.includes('observation') ||
+        pointLower.includes('taf') || pointLower.includes('forecast') || pointLower.includes('terminal forecast') ||
+        pointLower.includes('pirep') || pointLower.includes('pilot report') || pointLower.includes('aircraft report')) {
+        return 'overview';
+    }
+    
+    // Attention category: AFD, NOTAM, and everything else
+    return 'attention';
+}
+
+// Function to detect data source and return appropriate tag
+function detectDataSource(point) {
+    const pointLower = point.toLowerCase();
+    
+    // PIREP detection - pilot reports
+    if (pointLower.includes('pirep') || pointLower.includes('pilot report') || pointLower.includes('aircraft report')) {
+        return { tag: 'pilot-advice', label: 'PILOT ADVICE' };
+    }
+    
+    // AFD detection - Area Forecast Discussion (expert analysis)
+    if (pointLower.includes('afd') || pointLower.includes('area forecast') || pointLower.includes('forecast discussion')) {
+        return { tag: 'expert', label: 'EXPERT' };
+    }
+    
+    // SIGMET detection - significant meteorological information
+    if (pointLower.includes('sigmet') || pointLower.includes('significant weather')) {
+        return { tag: 'alert', label: 'ALERT' };
+    }
+    
+    // NOTAM detection - notices to airmen
+    if (pointLower.includes('notam') || pointLower.includes('notice to airmen')) {
+        return { tag: 'alert', label: 'ALERT' };
+    }
+    
+    // No tag for METAR, TAF, or other sources
+    return null;
+}
+
+// Function to clean the point text by removing data source prefixes
+function cleanPointText(point) {
+    // Remove common data source prefixes
+    return point
+        .replace(/^(PIREP|SIGMET|METAR|TAF|AFD|NOTAM):\s*/i, '')
+        .replace(/^(Pilot Report|Aircraft Report|Area Forecast|Terminal Forecast|Notice to Airmen):\s*/i, '')
+        .trim();
+}
+
+// Display summary points split into Overview and Attention categories
 function displaySummaryPoints(points) {
     const summaryPoints = document.getElementById('summaryPoints');
     summaryPoints.innerHTML = '';
     
-    points.forEach((point, index) => {
-        const pointElement = document.createElement('div');
-        pointElement.className = 'summary-bullet';
-        
-        // Determine priority based on content
-        let priority = 'low';
-        let priorityDot = '🟢';
-        
-        if (point.includes('SIGMET') || point.includes('severe') || point.includes('thunderstorm') || point.includes('hazardous')) {
-            priority = 'high';
-            priorityDot = '🔴';
-        } else if (point.includes('PIREP') || point.includes('turbulence') || point.includes('icing') || point.includes('moderate')) {
-            priority = 'medium';
-            priorityDot = '🟡';
+    // Separate points into categories
+    const overviewPoints = [];
+    const attentionPoints = [];
+    
+    points.forEach(point => {
+        const category = categorizeDataSource(point);
+        if (category === 'overview') {
+            overviewPoints.push(point);
+        } else {
+            attentionPoints.push(point);
         }
-        
-        pointElement.classList.add(priority);
-        pointElement.innerHTML = `
-            <div class="bullet-content">
-                <span class="priority-dot">${priorityDot}</span>
-                <span class="bullet-text">${point}</span>
-            </div>
-        `;
-        
-        summaryPoints.appendChild(pointElement);
     });
+    
+    // Create Overview section
+    if (overviewPoints.length > 0) {
+        const overviewSection = document.createElement('div');
+        overviewSection.className = 'summary-section';
+        overviewSection.innerHTML = `
+            <h4 class="section-title overview-title">📊 Overview</h4>
+            <div class="section-content overview-content"></div>
+        `;
+        summaryPoints.appendChild(overviewSection);
+        
+        const overviewContent = overviewSection.querySelector('.overview-content');
+        overviewPoints.forEach(point => {
+            const pointElement = createSummaryBullet(point);
+            overviewContent.appendChild(pointElement);
+        });
+    }
+    
+    // Create Attention section
+    if (attentionPoints.length > 0) {
+        const attentionSection = document.createElement('div');
+        attentionSection.className = 'summary-section';
+        attentionSection.innerHTML = `
+            <h4 class="section-title attention-title">⚠️ Attention</h4>
+            <div class="section-content attention-content"></div>
+        `;
+        summaryPoints.appendChild(attentionSection);
+        
+        const attentionContent = attentionSection.querySelector('.attention-content');
+        attentionPoints.forEach(point => {
+            const pointElement = createSummaryBullet(point);
+            attentionContent.appendChild(pointElement);
+        });
+    }
     
     // Update weather wallpaper based on new summary points
     setTimeout(() => {
         const weatherConditions = analyzeWeatherConditions();
         applyWeatherWallpaper(weatherConditions);
     }, 100);
+}
+
+// Helper function to create individual summary bullets
+function createSummaryBullet(point) {
+    const pointElement = document.createElement('div');
+    pointElement.className = 'summary-bullet';
+    
+    // Clean the point text by removing data source prefixes
+    const cleanedPoint = cleanPointText(point);
+    
+    // Detect data source and get appropriate tag (use original point for detection)
+    const dataSource = detectDataSource(point);
+    
+    // Build the HTML content
+    let tagHtml = '';
+    if (dataSource) {
+        tagHtml = `<span class="data-source-tag ${dataSource.tag}">${dataSource.label}</span>`;
+    }
+    
+    pointElement.innerHTML = `
+        <div class="bullet-content">
+            <span class="bullet-text">${cleanedPoint}</span>
+            ${tagHtml}
+        </div>
+    `;
+    
+    return pointElement;
 }
 
 // Get visibility from METAR/TAF data
@@ -533,6 +633,16 @@ function createWaypointPin(icaoCode, fullName, x, y, type = 'waypoint') {
 
 // ====== ADD YOUR WEATHER DATA LOADING HERE ======
 async function loadRouteWeatherData() {
+    // Show loading state for Current Weather widget
+    const currentWeatherWidget = document.getElementById('widgetCurrentWeather');
+    if (currentWeatherWidget) {
+        currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+            Temperature: Loading...<br>
+            Wind: Loading...<br>
+            Visibility: Loading...
+        `;
+    }
+    
     try {
         // Fetch weather data for each waypoint
         const weatherPromises = routeData.map(icao => fetchWeatherData(icao));
@@ -561,22 +671,102 @@ function updateWeatherWidgets(weatherDataArray) {
     // UPDATE WIDGETS WITH REAL DATA HERE
     const widgets = document.querySelectorAll('.widget');
     
-    // Current Weather Widget (First widget)
-    if (weatherDataArray[0]) {
-        const currentWeather = weatherDataArray[0];
-        widgets[0].querySelector('.widget-content').innerHTML = `
-            Temperature: ${currentWeather.temperature || 'N/A'}°C<br>
-            Wind: ${currentWeather.wind || 'N/A'}<br>
-            Visibility: ${currentWeather.visibility || 'N/A'}
-        `;
+    // Current Weather Widget (First widget) - Parse METAR data
+    if (weatherDataArray && weatherDataArray[0]) {
+        const metarData = weatherDataArray[0];
+        const currentWeatherWidget = widgets[0];
+        
+        if (currentWeatherWidget) {
+            const weatherInfo = parseMetarData(metarData);
+            currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+                Temperature: ${weatherInfo.temperature}<br>
+                Wind: ${weatherInfo.wind}<br>
+                Visibility: ${weatherInfo.visibility}
+            `;
+        }
     }
+}
+
+// Function to parse METAR data and extract weather information
+function parseMetarData(metarData) {
+    if (!metarData || !Array.isArray(metarData) || metarData.length === 0) {
+        return {
+            temperature: 'N/A',
+            wind: 'N/A',
+            visibility: 'N/A'
+        };
+    }
+    
+    const metar = metarData[0];
+    
+    // Extract temperature
+    let temperature = 'N/A';
+    if (metar.temp && metar.temp !== null) {
+        const tempC = Math.round(metar.temp);
+        temperature = `${tempC}°C`;
+    }
+    
+    // Extract wind information
+    let wind = 'N/A';
+    if (metar.wdir && metar.wspd !== null) {
+        const direction = metar.wdir || 'VRB';
+        const speed = metar.wspd || 0;
+        const gust = metar.wgst ? `G${metar.wgst}` : '';
+        wind = `${speed}${gust}kt ${direction}°`;
+    } else if (metar.rawOb) {
+        // Try to parse wind from raw METAR
+        const windMatch = metar.rawOb.match(/(\d{3}|VRB)(\d{2})(G(\d{2}))?KT/);
+        if (windMatch) {
+            const direction = windMatch[1] === 'VRB' ? 'VRB' : `${windMatch[1]}°`;
+            const speed = windMatch[2];
+            const gust = windMatch[4] ? `G${windMatch[4]}` : '';
+            wind = `${speed}${gust}kt ${direction}`;
+        }
+    }
+    
+    // Extract visibility
+    let visibility = 'N/A';
+    if (metar.vis && metar.vis !== null) {
+        if (metar.vis >= 10) {
+            visibility = '10+ SM';
+        } else {
+            visibility = `${metar.vis} SM`;
+        }
+    } else if (metar.rawOb) {
+        // Try to parse visibility from raw METAR
+        const visMatch = metar.rawOb.match(/(\d+)\s*SM/);
+        if (visMatch) {
+            const vis = parseInt(visMatch[1]);
+            visibility = vis >= 10 ? '10+ SM' : `${vis} SM`;
+        }
+    }
+    
+    return {
+        temperature,
+        wind,
+        visibility
+    };
 }
 
 function updateWeatherWidgetsError() {
     // HANDLE API ERRORS HERE
     const widgets = document.querySelectorAll('.widget');
+    
+    // Update Current Weather widget specifically
+    const currentWeatherWidget = document.getElementById('widgetCurrentWeather');
+    if (currentWeatherWidget) {
+        currentWeatherWidget.querySelector('.widget-content').innerHTML = `
+            Temperature: N/A<br>
+            Wind: N/A<br>
+            Visibility: N/A
+        `;
+    }
+    
+    // Update other widgets with generic error
     widgets.forEach(widget => {
-        widget.querySelector('.widget-content').innerHTML = 'Weather data unavailable';
+        if (widget.id !== 'widgetCurrentWeather') {
+            widget.querySelector('.widget-content').innerHTML = 'Weather data unavailable';
+        }
     });
 }
 
