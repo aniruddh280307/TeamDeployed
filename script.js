@@ -497,6 +497,9 @@ function createSummaryBullet(point) {
     // Detect data source and get appropriate tag (use original point for detection)
     const dataSource = detectDataSource(point);
     
+    // Generate unique ID for this bullet point
+    const bulletId = `bullet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     // Build the HTML content
     let tagHtml = '';
     if (dataSource) {
@@ -507,10 +510,327 @@ function createSummaryBullet(point) {
         <div class="bullet-content">
             <span class="bullet-text">${cleanedPoint}</span>
             ${tagHtml}
+            <a href="#" class="explanation-link" data-bullet-id="${bulletId}" data-original-text="${encodeURIComponent(point)}">🔍 See why</a>
         </div>
     `;
     
+    // Add click event listener for explanation
+    const explanationLink = pointElement.querySelector('.explanation-link');
+    explanationLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        showDetailedExplanation(point, bulletId);
+    });
+    
     return pointElement;
+}
+
+// Function to show detailed technical data from API
+async function showDetailedExplanation(originalText, bulletId) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('explanationModal');
+    if (!modal) {
+        modal = createExplanationModal();
+        document.body.appendChild(modal);
+    }
+    
+    // Show modal with loading state
+    modal.style.display = 'flex';
+    modal.querySelector('.modal-content').innerHTML = `
+        <div class="modal-header">
+            <h3>Technical Weather Data</h3>
+            <span class="close-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="loading-explanation">
+                <div class="spinner"></div>
+                <p>Fetching detailed technical data from aviation APIs...</p>
+            </div>
+        </div>
+    `;
+    
+    // Add close functionality
+    modal.querySelector('.close-modal').addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+    
+    // Close modal when clicking outside
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+    
+    try {
+        // Get detailed technical data from APIs
+        const technicalData = await getTechnicalWeatherData(originalText);
+        
+        // Update modal with technical data
+        modal.querySelector('.modal-body').innerHTML = `
+            <div class="explanation-content">
+                <div class="original-statement">
+                    <h4>Related to:</h4>
+                    <p class="statement-text">${originalText}</p>
+                </div>
+                <div class="technical-data">
+                    <h4>Detailed Technical Information:</h4>
+                    <div class="data-content">${technicalData}</div>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Failed to get technical data:', error);
+        modal.querySelector('.modal-body').innerHTML = `
+            <div class="error-message">
+                <h4>Unable to fetch technical data</h4>
+                <p>Please try again later or contact support if the issue persists.</p>
+            </div>
+        `;
+    }
+}
+
+// Function to create the explanation modal
+function createExplanationModal() {
+    const modal = document.createElement('div');
+    modal.id = 'explanationModal';
+    modal.className = 'explanation-modal';
+    modal.style.display = 'none';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Detailed Weather Analysis</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <!-- Content will be dynamically loaded -->
+            </div>
+        </div>
+    `;
+    
+    return modal;
+}
+
+// Function to get technical weather data from APIs
+async function getTechnicalWeatherData(originalText) {
+    try {
+        // Determine what type of data to fetch based on the statement
+        const dataType = determineDataType(originalText);
+        
+        // Fetch comprehensive technical data
+        const technicalData = await fetchComprehensiveWeatherData(dataType);
+        
+        return formatTechnicalData(technicalData, dataType);
+        
+    } catch (error) {
+        console.error('Failed to get technical data:', error);
+        return generateFallbackTechnicalData(originalText);
+    }
+}
+
+// Function to determine what type of technical data to fetch
+function determineDataType(statement) {
+    const text = statement.toLowerCase();
+    
+    if (text.includes('turbulence') || text.includes('pirep')) {
+        return 'pirep';
+    } else if (text.includes('sigmet') || text.includes('severe')) {
+        return 'sigmet';
+    } else if (text.includes('metar') || text.includes('visibility') || text.includes('wind')) {
+        return 'metar';
+    } else if (text.includes('taf') || text.includes('forecast')) {
+        return 'taf';
+    } else if (text.includes('afd') || text.includes('area forecast')) {
+        return 'afd';
+    } else if (text.includes('notam')) {
+        return 'notam';
+    } else {
+        return 'comprehensive';
+    }
+}
+
+// Function to fetch comprehensive weather data
+async function fetchComprehensiveWeatherData(dataType) {
+    const results = {};
+    
+    try {
+        // Fetch multiple data sources in parallel
+        const promises = [];
+        
+        if (dataType === 'comprehensive' || dataType === 'pirep') {
+            promises.push(fetchAviationData('pirep', { format: 'JSON', hours: 6 }));
+        }
+        if (dataType === 'comprehensive' || dataType === 'sigmet') {
+            promises.push(fetchAviationData('sigmet', { format: 'JSON', hours: 6 }));
+        }
+        if (dataType === 'comprehensive' || dataType === 'metar') {
+            promises.push(fetchAviationData('metar', { format: 'JSON', hours: 2 }));
+        }
+        if (dataType === 'comprehensive' || dataType === 'taf') {
+            promises.push(fetchAviationData('taf', { format: 'JSON', hours: 12 }));
+        }
+        if (dataType === 'comprehensive' || dataType === 'afd') {
+            promises.push(fetchAviationData('afd', { format: 'JSON', hours: 6 }));
+        }
+        if (dataType === 'comprehensive' || dataType === 'notam') {
+            promises.push(fetchAviationData('notam', { format: 'JSON', hours: 24 }));
+        }
+        
+        const dataResults = await Promise.all(promises);
+        
+        // Organize results by data type
+        let index = 0;
+        if (dataType === 'comprehensive' || dataType === 'pirep') {
+            results.pirep = dataResults[index++];
+        }
+        if (dataType === 'comprehensive' || dataType === 'sigmet') {
+            results.sigmet = dataResults[index++];
+        }
+        if (dataType === 'comprehensive' || dataType === 'metar') {
+            results.metar = dataResults[index++];
+        }
+        if (dataType === 'comprehensive' || dataType === 'taf') {
+            results.taf = dataResults[index++];
+        }
+        if (dataType === 'comprehensive' || dataType === 'afd') {
+            results.afd = dataResults[index++];
+        }
+        if (dataType === 'comprehensive' || dataType === 'notam') {
+            results.notam = dataResults[index++];
+        }
+        
+        return results;
+        
+    } catch (error) {
+        console.error('Error fetching comprehensive data:', error);
+        return {};
+    }
+}
+
+// Function to format technical data for display
+function formatTechnicalData(data, dataType) {
+    let html = '';
+    
+    // Format PIREP data
+    if (data.pirep && Array.isArray(data.pirep) && data.pirep.length > 0) {
+        html += '<div class="data-section"><h5>📊 Pilot Reports (PIREP)</h5>';
+        data.pirep.slice(0, 5).forEach((pirep, index) => {
+            html += `
+                <div class="data-item">
+                    <strong>Report ${index + 1}:</strong><br>
+                    <span class="data-label">Aircraft:</span> ${pirep.aircraftRef || 'N/A'}<br>
+                    <span class="data-label">Location:</span> ${pirep.obsTime ? new Date(pirep.obsTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Altitude:</span> ${pirep.fltlvl || 'N/A'}<br>
+                    <span class="data-label">Raw Report:</span> ${pirep.rawPirep || 'N/A'}<br>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Format SIGMET data
+    if (data.sigmet && Array.isArray(data.sigmet) && data.sigmet.length > 0) {
+        html += '<div class="data-section"><h5>⚠️ Significant Weather (SIGMET)</h5>';
+        data.sigmet.slice(0, 3).forEach((sigmet, index) => {
+            html += `
+                <div class="data-item">
+                    <strong>SIGMET ${index + 1}:</strong><br>
+                    <span class="data-label">Hazard:</span> ${sigmet.hazard || 'N/A'}<br>
+                    <span class="data-label">Valid Time:</span> ${sigmet.validTime ? new Date(sigmet.validTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Raw SIGMET:</span> ${sigmet.rawSigmet || 'N/A'}<br>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Format METAR data
+    if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
+        html += '<div class="data-section"><h5>🌤️ Current Weather (METAR)</h5>';
+        data.metar.slice(0, 3).forEach((metar, index) => {
+            html += `
+                <div class="data-item">
+                    <strong>Station ${index + 1}:</strong><br>
+                    <span class="data-label">Station:</span> ${metar.stationId || 'N/A'}<br>
+                    <span class="data-label">Temperature:</span> ${metar.temp ? `${metar.temp}°C` : 'N/A'}<br>
+                    <span class="data-label">Wind:</span> ${metar.wdir ? `${metar.wdir}°` : 'N/A'} ${metar.wspd ? `${metar.wspd}kt` : ''} ${metar.wgst ? `G${metar.wgst}` : ''}<br>
+                    <span class="data-label">Visibility:</span> ${metar.vis ? `${metar.vis} SM` : 'N/A'}<br>
+                    <span class="data-label">Raw METAR:</span> ${metar.rawOb || 'N/A'}<br>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Format TAF data
+    if (data.taf && Array.isArray(data.taf) && data.taf.length > 0) {
+        html += '<div class="data-section"><h5>📈 Terminal Forecast (TAF)</h5>';
+        data.taf.slice(0, 2).forEach((taf, index) => {
+            html += `
+                <div class="data-item">
+                    <strong>TAF ${index + 1}:</strong><br>
+                    <span class="data-label">Station:</span> ${taf.stationId || 'N/A'}<br>
+                    <span class="data-label">Issue Time:</span> ${taf.issueTime ? new Date(taf.issueTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Valid Period:</span> ${taf.validTime ? new Date(taf.validTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Raw TAF:</span> ${taf.rawTAF || 'N/A'}<br>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Format AFD data
+    if (data.afd && Array.isArray(data.afd) && data.afd.length > 0) {
+        html += '<div class="data-section"><h5>📋 Area Forecast Discussion (AFD)</h5>';
+        data.afd.slice(0, 2).forEach((afd, index) => {
+            html += `
+                <div class="data-item">
+                    <strong>AFD ${index + 1}:</strong><br>
+                    <span class="data-label">Issue Time:</span> ${afd.issueTime ? new Date(afd.issueTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Valid Time:</span> ${afd.validTime ? new Date(afd.validTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Content:</span> ${afd.rawAfd ? afd.rawAfd.substring(0, 200) + '...' : 'N/A'}<br>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Format NOTAM data
+    if (data.notam && Array.isArray(data.notam) && data.notam.length > 0) {
+        html += '<div class="data-section"><h5>📢 Notices to Airmen (NOTAM)</h5>';
+        data.notam.slice(0, 3).forEach((notam, index) => {
+            html += `
+                <div class="data-item">
+                    <strong>NOTAM ${index + 1}:</strong><br>
+                    <span class="data-label">ICAO ID:</span> ${notam.icaoId || 'N/A'}<br>
+                    <span class="data-label">Issue Time:</span> ${notam.issueTime ? new Date(notam.issueTime).toLocaleString() : 'N/A'}<br>
+                    <span class="data-label">Raw NOTAM:</span> ${notam.rawNotam || 'N/A'}<br>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    if (!html) {
+        html = '<div class="no-data">No additional technical data available for this statement.</div>';
+    }
+    
+    return html;
+}
+
+// Fallback technical data when APIs are not available
+function generateFallbackTechnicalData(originalText) {
+    return `
+        <div class="no-data">
+            <h5>⚠️ API Data Unavailable</h5>
+            <p>Unable to fetch additional technical data from aviation weather APIs. This could be due to:</p>
+            <ul>
+                <li>Network connectivity issues</li>
+                <li>Aviation weather service maintenance</li>
+                <li>API rate limiting</li>
+            </ul>
+            <p><strong>Recommendation:</strong> Check official aviation weather sources directly or try again later.</p>
+        </div>
+    `;
 }
 
 // Get visibility from METAR/TAF data

@@ -178,6 +178,60 @@ async def openai_summarize(payload: Dict[str, Any]) -> List[str]:
 		return [f"AI summarization failed: {e}"]
 
 
+async def get_ai_explanation(statement: str, context: str = "aviation_weather") -> str:
+	"""Get detailed AI explanation for a weather statement"""
+	if not OPENAI_API_KEY:
+		return "OpenAI API key not configured. Please contact your administrator."
+	
+	try:
+		# Build detailed explanation prompt
+		prompt = f"""
+You are an expert aviation meteorologist and flight instructor. Provide a detailed, educational explanation of this weather statement for pilots.
+
+WEATHER STATEMENT: {statement}
+
+Please provide a comprehensive explanation that includes:
+
+1. **What this means** - Plain English explanation of the weather phenomenon
+2. **Technical details** - Meteorological background and scientific explanation
+3. **Impact on flight operations** - How this affects aircraft performance, safety, and procedures
+4. **Pilot actions** - Specific steps pilots should take or considerations
+5. **Safety implications** - Risk factors and safety recommendations
+6. **Related weather patterns** - Context about what causes this condition
+7. **Forecasting** - How this condition typically develops or changes
+
+Format your response in clear, professional language suitable for both student and experienced pilots. Use bullet points and bold headings for clarity. Keep explanations detailed but accessible.
+
+Context: {context}
+"""
+		
+		# Call OpenAI API for detailed explanation
+		openai_url = "https://api.openai.com/v1/chat/completions"
+		headers = {
+			"Authorization": f"Bearer {OPENAI_API_KEY}",
+			"Content-Type": "application/json",
+		}
+		body = {
+			"model": "gpt-4o-mini",
+			"messages": [
+				{"role": "system", "content": "You are an expert aviation meteorologist and flight instructor with deep knowledge of weather phenomena, flight safety, and pilot procedures."},
+				{"role": "user", "content": prompt},
+			],
+			"temperature": 0.3,
+			"max_tokens": 800,
+		}
+		
+		async with httpx.AsyncClient() as client:
+			resp = await client.post(openai_url, headers=headers, json=body, timeout=45.0)
+			resp.raise_for_status()
+			data = resp.json()
+			explanation = data["choices"][0]["message"]["content"]
+			return explanation
+			
+	except Exception as e:
+		return f"AI explanation failed: {str(e)}. Please try again later."
+
+
 @app.get("/api/health")
 async def health() -> Dict[str, str]:
 	return {"status": "ok"}
@@ -229,6 +283,27 @@ async def get_route_weather(route: str) -> Dict[str, Any]:
 			"route": icaos,
 			"data": data,
 			"errors": data.get("errors", {})
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/aviation/explain")
+async def explain_weather_statement(request: Dict[str, Any]) -> Dict[str, Any]:
+	"""Get detailed AI explanation for a weather statement"""
+	try:
+		statement = request.get("statement", "")
+		context = request.get("context", "aviation_weather")
+		
+		if not statement:
+			raise HTTPException(status_code=400, detail="Statement is required")
+		
+		# Get detailed explanation using AI
+		explanation = await get_ai_explanation(statement, context)
+		
+		return {
+			"statement": statement,
+			"explanation": explanation,
+			"context": context
 		}
 	except Exception as e:
 		raise HTTPException(status_code=500, detail=str(e))
