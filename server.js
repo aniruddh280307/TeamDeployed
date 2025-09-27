@@ -3,6 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const OpenAI = require('openai');
 const NodeCache = require('node-cache');
+const AviationRiskScoringService = require('./risk-scoring-service');
 const { aviationAPI } = require('./api-integration');
 require('dotenv').config();
 
@@ -11,6 +12,9 @@ const PORT = process.env.PORT || 3001;
 
 // Initialize cache with 5-minute TTL
 const cache = new NodeCache({ stdTTL: 300 });
+
+// Initialize risk scoring service
+const riskScoringService = new AviationRiskScoringService();
 
 // Middleware
 app.use(cors({
@@ -384,13 +388,13 @@ function generateMetarSummary(metarData, stationName, timeStr) {
 }
 
 // Enhanced AI Summary Generation with better error handling
-async function generateAISummary(weatherData) {
+async function generateAISummary(weatherData, stations = []) {
   console.log('🔍 generateAISummary called with openai:', !!openai);
   
   // If OpenAI is not available, generate a manual summary from the data
   if (!openai) {
     console.log('🧠 OpenAI not available, using manual summary');
-    return generateManualSummary(weatherData);
+    return await generateManualSummary(weatherData, stations);
   }
 
   try {
@@ -437,18 +441,62 @@ Provide detailed, actionable information that pilots can use for flight planning
   } catch (error) {
     console.error('OpenAI API Error:', error.message);
     console.log('🔄 Falling back to manual summary due to OpenAI error');
-    return generateManualSummary(weatherData);
+    return await generateManualSummary(weatherData, stations);
   }
 }
 
+// Helper functions for risk assessment display
+function getRiskLevel(score) {
+  if (score >= 91) return 'Severe';
+  if (score >= 71) return 'High';
+  if (score >= 46) return 'Amber-High';
+  if (score >= 21) return 'Amber-Low';
+  return 'Low';
+}
+
+function getRiskEmoji(riskLevel) {
+  switch (riskLevel) {
+    case 'Severe': return '🚨';
+    case 'High': return '⚠️';
+    case 'Amber-High': return '⚠️';
+    case 'Amber-Low': return '⚠️';
+    default: return '✅';
+  }
+}
+
+function getRiskColor(riskLevel) {
+  switch (riskLevel) {
+    case 'Severe': return 'severe';
+    case 'High': return 'high';
+    case 'Amber-High': return 'amber-high';
+    case 'Amber-Low': return 'amber-low';
+    default: return 'low';
+  }
+}
+
+function getParameterDisplayName(parameter) {
+  const names = {
+    visibility: 'Visibility',
+    ceiling: 'Ceiling',
+    wind: 'Wind',
+    temperature: 'Temperature',
+    turbulence: 'Turbulence',
+    icing: 'Icing',
+    sigmet: 'SIGMET',
+    afd: 'AFD'
+  };
+  return names[parameter] || parameter.charAt(0).toUpperCase() + parameter.slice(1);
+}
+
 // Manual summary generation with concise 5-6 line format and categories
-function generateManualSummary(weatherData) {
+async function generateManualSummary(weatherData, stations = []) {
   console.log('🚨 generateManualSummary CALLED - CONCISE FORMAT!');
   console.log('🔍 Generating manual summary with data:', {
     metar: weatherData.metar ? weatherData.metar.length : 0,
     taf: weatherData.taf ? weatherData.taf.length : 0,
     pirep: weatherData.pirep ? weatherData.pirep.length : 0,
-    sigmet: weatherData.sigmet ? weatherData.sigmet.length : 0
+    sigmet: weatherData.sigmet ? weatherData.sigmet.length : 0,
+    afd: weatherData.afd ? weatherData.afd.length : 0
   });
   
   const weatherBriefing = [];
@@ -456,21 +504,30 @@ function generateManualSummary(weatherData) {
   // CONCISE WEATHER BRIEFING (5-6 lines only)
   weatherBriefing.push('🌤️ WEATHER BRIEFING SUMMARY');
   
-  // Overview Category (METAR, TAF, PIREP)
+  // Overview Category (SIGMET, METAR, TAF, PIREP)
   weatherBriefing.push('\n📊 OVERVIEW:');
+  
+  // Weather Alerts (SIGMET) - 1 line
+  if (weatherData.sigmet && weatherData.sigmet.length > 0) {
+    const sigmet = weatherData.sigmet[0];
+    const decodedSIGMET = decodeSIGMET(sigmet);
+    weatherBriefing.push(`• Weather Alert: ${decodedSIGMET.summary} <a href="#" class="see-why" data-station="${sigmet.icaoId || 'Unknown'}" data-type="sigmet">See why</a>`);
+  } else {
+    weatherBriefing.push(`• Weather Alerts: No active warnings`);
+  }
   
   // Current Weather (METAR) - 1 line
   if (weatherData.metar && weatherData.metar.length > 0) {
     const metar = weatherData.metar[0];
     const decodedMetar = decodeMETAR(metar);
-    weatherBriefing.push(`• ${metar.icaoId}: ${decodedMetar.summary} <span class="tag pilot-advice">pilot advice</span> <a href="#" class="see-why" data-station="${metar.icaoId}" data-type="metar">See why</a>`);
+    weatherBriefing.push(`• ${metar.icaoId}: ${decodedMetar.summary} <a href="#" class="see-why" data-station="${metar.icaoId}" data-type="metar">See why</a>`);
   }
   
   // Forecast (TAF) - 1 line
   if (weatherData.taf && weatherData.taf.length > 0) {
     const taf = weatherData.taf[0];
     const decodedTAF = decodeTAF(taf);
-    weatherBriefing.push(`• ${taf.icaoId}: ${decodedTAF.summary} <span class="tag expert">expert</span> <a href="#" class="see-why" data-station="${taf.icaoId}" data-type="taf">See why</a>`);
+    weatherBriefing.push(`• ${taf.icaoId}: ${decodedTAF.summary} <a href="#" class="see-why" data-station="${taf.icaoId}" data-type="taf">See why</a>`);
   }
   
   // Pilot Reports (PIREP) - 1 line
@@ -482,20 +539,53 @@ function generateManualSummary(weatherData) {
     weatherBriefing.push(`• Pilot Reports: No recent observations <span class="tag pilot-advice">pilot advice</span>`);
   }
   
-  // Attention Category (SIGMET, AFD, NOTAM)
+  // Attention Category (AFD + Risk Assessment)
   weatherBriefing.push('\n⚠️ ATTENTION:');
   
-  // Weather Alerts (SIGMET) - 1 line
-  if (weatherData.sigmet && weatherData.sigmet.length > 0) {
-    const sigmet = weatherData.sigmet[0];
-    const decodedSIGMET = decodeSIGMET(sigmet);
-    weatherBriefing.push(`• Weather Alert: ${decodedSIGMET.summary} <span class="tag expert">expert</span> <a href="#" class="see-why" data-station="${sigmet.icaoId || 'Unknown'}" data-type="sigmet">See why</a>`);
+  // Area Forecast Discussion (AFD) - 1 line
+  if (weatherData.afd && weatherData.afd.length > 0) {
+    const afd = weatherData.afd[0];
+    const decodedAFD = decodeAFD(afd);
+    weatherBriefing.push(`• Area Forecast: ${decodedAFD.summary} <a href="#" class="see-why" data-station="${afd.icaoId || 'Unknown'}" data-type="afd">See why</a>`);
   } else {
-    weatherBriefing.push(`• Weather Alerts: No active warnings <span class="tag expert">expert</span>`);
+    weatherBriefing.push(`• Area Forecast: No area forecast discussion available`);
   }
   
-  // Flight Safety - 1 line
-  weatherBriefing.push(`• Flight Safety: Monitor conditions, check updates, be prepared for changes <span class="tag expert">expert</span>`);
+  // Risk Assessment - Add detailed risk breakdown if stations provided
+  if (stations && stations.length > 0) {
+    try {
+      // Get actual weather data for risk calculation
+      const riskWeatherData = {
+        metar: weatherData.metar || [],
+        taf: weatherData.taf || [],
+        pirep: weatherData.pirep || [],
+        sigmet: weatherData.sigmet || [],
+        afd: weatherData.afd || []
+      };
+      
+      const riskAssessment = await riskScoringService.calculateRiskScoreFromData(riskWeatherData);
+      
+      // Display risk assessment regardless of score level
+      weatherBriefing.push(`• Risk Assessment: ${riskAssessment.riskCategory.label} (${riskAssessment.overallRisk}/100)`);
+      
+      // Get all individual risks sorted by score (highest first)
+      const sortedRisks = Object.entries(riskAssessment.individualRisks)
+        .sort(([,a], [,b]) => b - a);
+      
+      // Add all risk parameters (not just high-risk ones)
+      sortedRisks.forEach(([parameter, score]) => {
+        const riskLevel = getRiskLevel(score);
+        const riskEmoji = getRiskEmoji(riskLevel);
+        const riskColor = getRiskColor(riskLevel);
+        const parameterName = getParameterDisplayName(parameter);
+        
+        weatherBriefing.push(`• ${riskEmoji} ${parameterName}: ${riskLevel} (${score}/100) <span class="tag risk-${riskColor}">${riskLevel}</span>`);
+      });
+      
+    } catch (error) {
+      console.log('⚠️ Risk assessment not available:', error.message);
+    }
+  }
   
   const result = weatherBriefing.join('\n');
   
@@ -639,6 +729,36 @@ function decodeSIGMET(sigmet) {
   return {
     summary: summary.trim(),
     raw: rawSIGMET
+  };
+}
+
+function decodeAFD(afd) {
+  const rawAFD = afd.rawOb || '';
+  const icaoId = afd.icaoId || 'Unknown';
+  
+  let summary = 'Area Forecast Discussion - ';
+  
+  // Extract AFD information
+  if (rawAFD.includes('SYNOPSIS')) {
+    summary += 'Synopsis available. ';
+  }
+  if (rawAFD.includes('DISCUSSION')) {
+    summary += 'Meteorological discussion available. ';
+  }
+  if (rawAFD.includes('OUTLOOK')) {
+    summary += 'Extended outlook available. ';
+  }
+  
+  if (summary === 'Area Forecast Discussion - ') {
+    summary += 'Area forecast discussion available for detailed weather analysis.';
+  }
+  
+  // Remove "expert advice" text from the summary content
+  summary = summary.replace(/expert advice/gi, '').trim();
+  
+  return {
+    summary: summary.trim(),
+    raw: rawAFD
   };
 }
 
@@ -1504,7 +1624,7 @@ app.post('/aviation/summary', async (req, res) => {
       sigmet: weatherData.sigmet ? weatherData.sigmet.length : 0
     });
     
-    const summaryResult = await generateAISummary(weatherData);
+    const summaryResult = await generateAISummary(weatherData, stationList);
     console.log('📝 Generated summary result:', summaryResult);
 
     // Handle weather briefing summary format (same as Python version)
@@ -1670,7 +1790,7 @@ app.get('/see-why', async (req, res) => {
           rawData = metar.rawOb || '';
           detailedExplanation = `Detailed METAR Analysis for ${station}:
 
-Raw METAR: ${rawData}
+Raw METAR Code: ${rawData}
 
 Decoded Information:
 • Airport: ${station}
@@ -1678,8 +1798,9 @@ Decoded Information:
 • Visibility: ${decoded.visibility}
 • Temperature: ${decoded.temperature}
 • Pressure: ${decoded.pressure}
+• Weather Conditions: ${decoded.weather || 'No significant weather'}
 
-This METAR provides current weather conditions at ${station} airport. The wind direction and speed are crucial for runway selection and approach planning. Visibility affects landing minimums, while temperature and pressure are important for aircraft performance calculations.`;
+This METAR provides current weather conditions at ${station} airport. The raw METAR code follows international aviation standards, while the decoded information translates these codes into human-readable format. Wind direction and speed are crucial for runway selection and approach planning. Visibility affects landing minimums, while temperature and pressure are important for aircraft performance calculations.`;
         }
         break;
 
@@ -1736,6 +1857,23 @@ This SIGMET (Significant Meteorological Information) warns of hazardous weather 
         }
         break;
 
+      case 'afd':
+        const afdData = await fetchAviationData('afd', { ids: station, hours: 6, format: 'json' });
+        if (afdData && afdData.length > 0) {
+          const afd = afdData[0];
+          const decoded = decodeAFD(afd);
+          rawData = afd.rawOb || '';
+          detailedExplanation = `Detailed AFD Analysis for ${station}:
+
+Raw AFD: ${rawData}
+
+Decoded Information:
+• Area Forecast: ${decoded.summary}
+
+This AFD (Area Forecast Discussion) provides detailed meteorological analysis and forecast reasoning for the area. AFDs are essential for understanding the meteorological reasoning behind forecasts and help pilots make informed decisions about weather conditions.`;
+        }
+        break;
+
       default:
         return res.status(400).json({ error: 'Invalid type specified' });
     }
@@ -1772,6 +1910,115 @@ app.use('*', (req, res) => {
     method: req.method,
     timestamp: new Date().toISOString()
   });
+});
+
+// ==================== RISK SCORING ENDPOINTS ====================
+
+// Risk assessment endpoint
+app.post('/risk/assess', async (req, res) => {
+  try {
+    const { stations } = req.body;
+    
+    if (!stations || !Array.isArray(stations) || stations.length === 0) {
+      return res.status(400).json({ 
+        error: 'Stations array is required and must not be empty' 
+      });
+    }
+
+    console.log('🎯 Risk assessment requested for stations:', stations);
+    
+    const riskAssessment = await riskScoringService.calculateRiskScore(stations);
+    
+    res.json({
+      success: true,
+      data: riskAssessment
+    });
+    
+  } catch (error) {
+    console.error('❌ Risk assessment error:', error);
+    res.status(500).json({ 
+      error: 'Failed to calculate risk assessment',
+      details: error.message 
+    });
+  }
+});
+
+// Dashboard risk assessment endpoint
+app.post('/risk/dashboard', async (req, res) => {
+  try {
+    const { stations } = req.body;
+    
+    if (!stations || !Array.isArray(stations) || stations.length === 0) {
+      return res.status(400).json({ 
+        error: 'Stations array is required and must not be empty' 
+      });
+    }
+
+    console.log('📊 Dashboard risk assessment for stations:', stations);
+    
+    const dashboardRisk = await riskScoringService.getDashboardRiskAssessment(stations);
+    
+    res.json({
+      success: true,
+      data: dashboardRisk
+    });
+    
+  } catch (error) {
+    console.error('❌ Dashboard risk assessment error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get dashboard risk assessment',
+      details: error.message 
+    });
+  }
+});
+
+// Risk thresholds endpoint (for frontend reference)
+app.get('/risk/thresholds', (req, res) => {
+  try {
+    const thresholds = {
+      visibility: {
+        safe: 6,      // ≥ 6 SM
+        caution: 3,   // 3-6 SM
+        hazard: 0     // < 3 SM
+      },
+      ceiling: {
+        safe: 3000,  // ≥ 3000 ft AGL
+        caution: 1000, // 1000-3000 ft AGL
+        hazard: 0     // < 1000 ft AGL
+      },
+      wind: {
+        caution: 20,  // 20 knots sustained
+        cautionGust: 25, // 25 knots gust
+        hazard: 35    // 35 knots
+      },
+      temperature: {
+        fogRisk: 2    // ≤ 2°C temp/dew spread
+      }
+    };
+
+    const riskBands = {
+      low: { min: 0, max: 20, color: 'green', label: 'Low Risk', action: 'Routine operations' },
+      amberLow: { min: 21, max: 45, color: 'amber', label: 'Amber-Low', action: 'Monitor conditions; prepare mitigations' },
+      amberHigh: { min: 46, max: 70, color: 'amber', label: 'Amber-High', action: 'Likely operational impact; notify crew/dispatch' },
+      high: { min: 71, max: 90, color: 'red', label: 'High Risk', action: 'Restrict operations; consider delay/diversion' },
+      severe: { min: 91, max: 100, color: 'red', label: 'Severe Risk', action: 'Suspend operations; emergency procedures' }
+    };
+
+    res.json({
+      success: true,
+      data: {
+        thresholds,
+        riskBands
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Risk thresholds error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get risk thresholds',
+      details: error.message 
+    });
+  }
 });
 
 // Graceful shutdown

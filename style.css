@@ -9,7 +9,7 @@
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.6;
-    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 25%, #3b82f6 50%, #60a5fa 75%, #93c5fd 100%);
+    background: linear-gradient(135deg, #4682B4 0%, #5F9EA0 50%, #4682B4 100%);
     min-height: 100vh;
     color: #ffffff;
     font-weight: 400;
@@ -946,8 +946,30 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .tag.expert {
-    background-color: #10b981;
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
     color: white;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 18px;
+    box-shadow: 0 3px 12px rgba(220, 38, 38, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border: 3px solid #991b1b;
+    animation: pulse-expert 1.5s ease-in-out infinite;
+    position: relative;
+    z-index: 10;
+}
+
+@keyframes pulse-expert {
+    0%, 100% { 
+        box-shadow: 0 3px 12px rgba(220, 38, 38, 0.5), 0 0 20px rgba(220, 38, 38, 0.3);
+        transform: scale(1);
+    }
+    50% { 
+        box-shadow: 0 6px 20px rgba(220, 38, 38, 0.8), 0 0 30px rgba(220, 38, 38, 0.6);
+        transform: scale(1.08);
+    }
 }
 
 /* See why button styling - positioned after tags */
@@ -1298,6 +1320,7 @@ h1, h2, h3, h4, h5, h6 {
     border-left: 4px solid #ef4444;
     background: rgba(239, 68, 68, 0.05);
 }
+
 
 /* Enhanced Overview and Attention Headings */
 .overview-heading, .attention-heading {
@@ -2385,6 +2408,167 @@ h1, h2, h3, h4, h5, h6 {
     color: #64748b;
     font-size: 0.8rem;
     font-style: italic;
+}
+
+/* Risk Assessment Widget Styles */
+.risk-widget {
+    border: 2px solid #ef4444;
+    background: linear-gradient(135deg, #fef2f2, #fee2e2);
+    animation: pulse-risk 2s ease-in-out infinite;
+}
+
+.risk-widget.low-risk {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    animation: none;
+}
+
+.risk-widget.amber-risk {
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+}
+
+.risk-widget.high-risk {
+    border-color: #ef4444;
+    background: linear-gradient(135deg, #fef2f2, #fee2e2);
+}
+
+.risk-widget.severe-risk {
+    border-color: #dc2626;
+    background: linear-gradient(135deg, #fef2f2, #fecaca);
+    animation: pulse-severe 1s ease-in-out infinite;
+}
+
+@keyframes pulse-risk {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    50% { 
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+}
+
+@keyframes pulse-severe {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+        transform: scale(1);
+    }
+    50% { 
+        box-shadow: 0 0 0 15px rgba(220, 38, 38, 0);
+        transform: scale(1.02);
+    }
+}
+
+.risk-recommendations {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.risk-recommendations .recommendation {
+    margin-bottom: 4px;
+    padding: 2px 0;
+}
+
+.risk-recommendations .recommendation:last-child {
+    margin-bottom: 0;
+}
+
+.risk-recommendations .priority-high {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.risk-recommendations .priority-medium {
+    color: #f59e0b;
+    font-weight: 500;
+}
+
+.risk-recommendations .priority-critical {
+    color: #dc2626;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Risk-specific tag styles */
+.tag.risk-severe {
+    background: linear-gradient(135deg, #dc2626, #991b1b);
+    color: white;
+    font-weight: 800;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: 2px solid #7f1d1d;
+    animation: pulse-severe-tag 1.5s ease-in-out infinite;
+}
+
+.tag.risk-high {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border: 1px solid #b91c1c;
+}
+
+.tag.risk-amber-high {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    font-weight: 600;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    border: 1px solid #b45309;
+}
+
+.tag.risk-amber-low {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: white;
+    font-weight: 500;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(251, 191, 36, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.1px;
+    border: 1px solid #d97706;
+}
+
+.tag.risk-low {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    font-weight: 500;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(16, 185, 129, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.1px;
+    border: 1px solid #047857;
+}
+
+@keyframes pulse-severe-tag {
+    0%, 100% { 
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4), 0 0 0 0 rgba(220, 38, 38, 0.7);
+        transform: scale(1);
+    }
+    50% { 
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.6), 0 0 0 8px rgba(220, 38, 38, 0);
+        transform: scale(1.05);
+    }
 }
 
 @media (max-width: 768px) {

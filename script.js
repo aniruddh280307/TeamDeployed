@@ -1212,9 +1212,8 @@ function updateFlightInformation(weatherData, stations) {
     
     if (!stations || stations.length < 2) return;
     
-    // Calculate flight distance and time
+    // Calculate flight distance
     const distance = calculateFlightDistance(stations);
-    const flightTime = calculateFlightTime(distance);
     const route = `${stations[0]} → ${stations[stations.length - 1]}`;
     
     // Update route
@@ -1229,11 +1228,6 @@ function updateFlightInformation(weatherData, stations) {
         distanceElement.textContent = `${distance.toFixed(0)} nm`;
     }
     
-    // Update flight time
-    const timeElement = document.getElementById('flightTime');
-    if (timeElement) {
-        timeElement.textContent = `${flightTime.hours}h ${flightTime.minutes}m`;
-    }
     
     // Update weather status
     const weatherStatusElement = document.getElementById('weatherStatus');
@@ -1286,14 +1280,6 @@ function calculateFlightDistance(stations) {
     return baseDistance + (stationCount * distancePerStation);
 }
 
-// Calculate flight time based on distance
-function calculateFlightTime(distance) {
-    const averageSpeed = 500; // knots
-    const totalMinutes = (distance / averageSpeed) * 60;
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = Math.round(totalMinutes % 60);
-    return { hours, minutes };
-}
 
 // Analyze weather status
 function analyzeWeatherStatus(weatherData) {
@@ -2433,13 +2419,8 @@ function updateFlightInfo() {
             // const distanceData = await calculateFlightDistance(routeData);
             // document.getElementById('totalDistance').textContent = `${distanceData.distance} NM`;
             
-            // EXAMPLE: Call flight time estimation API  
-            // const timeData = await estimateFlightTime(routeData);
-            // document.getElementById('flightTime').textContent = timeData.formattedTime;
-            
             // For now, showing simulated data
-            document.getElementById('totalDistance').textContent = `${Math.floor(Math.random() * 3000 + 1000)} NM`;
-            document.getElementById('flightTime').textContent = `${Math.floor(Math.random() * 8 + 2)}h ${Math.floor(Math.random() * 60)}m`;
+            document.getElementById('totalDistance').textContent = `${Math.floor(Math.random() * 3000 + 1000)} nm`;
             document.getElementById('weatherStatus').textContent = 'Favorable';
             document.getElementById('routeComplexity').textContent = routeData.length > 3 ? 'Complex' : 'Standard';
         } catch (error) {
@@ -2707,6 +2688,137 @@ function attachNavHandlers() {
     if (btn3) btn3.addEventListener('click', () => toPage(3));
 }
 
+// ==================== RISK ASSESSMENT FUNCTIONS ====================
+
+/**
+ * Update risk assessment widget
+ */
+async function updateRiskAssessment(stations) {
+    try {
+        console.log('🎯 Updating risk assessment for stations:', stations);
+        
+        const response = await fetch('/risk/dashboard', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ stations })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Risk assessment failed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            displayRiskAssessment(result.data);
+        } else {
+            console.error('❌ Risk assessment failed:', result.error);
+            hideRiskWidget();
+        }
+        
+    } catch (error) {
+        console.error('❌ Risk assessment error:', error);
+        hideRiskWidget();
+    }
+}
+
+/**
+ * Display risk assessment in the widget
+ */
+function displayRiskAssessment(riskData) {
+    const riskWidget = document.getElementById('riskWidget');
+    const riskIcon = document.getElementById('riskIcon');
+    const riskScoreValue = document.getElementById('riskScoreValue');
+    const riskDescription = document.getElementById('riskDescription');
+    const riskRecommendations = document.getElementById('riskRecommendations');
+    
+    if (!riskWidget || !riskIcon || !riskScoreValue || !riskDescription) {
+        console.error('❌ Risk widget elements not found');
+        return;
+    }
+    
+    // Show the widget
+    riskWidget.style.display = 'block';
+    
+    // Update risk score and description
+    riskScoreValue.textContent = `${riskData.riskScore}/100`;
+    riskDescription.textContent = riskData.riskLevel;
+    
+    // Update icon and styling based on risk level
+    updateRiskWidgetStyling(riskWidget, riskIcon, riskData.riskColor, riskData.riskLevel);
+    
+    // Update recommendations
+    if (riskData.recommendations && riskData.recommendations.length > 0) {
+        displayRiskRecommendations(riskRecommendations, riskData.recommendations);
+    } else {
+        riskRecommendations.style.display = 'none';
+    }
+}
+
+/**
+ * Update risk widget styling based on risk level
+ */
+function updateRiskWidgetStyling(widget, icon, color, level) {
+    // Remove existing risk classes
+    widget.classList.remove('low-risk', 'amber-risk', 'high-risk', 'severe-risk');
+    
+    // Update icon
+    if (color === 'red' && level.includes('Severe')) {
+        icon.textContent = '🚨';
+        widget.classList.add('severe-risk');
+    } else if (color === 'red') {
+        icon.textContent = '⚠️';
+        widget.classList.add('high-risk');
+    } else if (color === 'amber') {
+        icon.textContent = '⚠️';
+        widget.classList.add('amber-risk');
+    } else {
+        icon.textContent = '✅';
+        widget.classList.add('low-risk');
+    }
+}
+
+/**
+ * Display risk recommendations
+ */
+function displayRiskRecommendations(container, recommendations) {
+    if (!container) return;
+    
+    container.innerHTML = '';
+    container.style.display = 'block';
+    
+    recommendations.forEach(rec => {
+        const recElement = document.createElement('div');
+        recElement.className = `recommendation priority-${rec.priority}`;
+        recElement.textContent = rec.message;
+        container.appendChild(recElement);
+    });
+}
+
+/**
+ * Hide risk widget
+ */
+function hideRiskWidget() {
+    const riskWidget = document.getElementById('riskWidget');
+    if (riskWidget) {
+        riskWidget.style.display = 'none';
+    }
+}
+
+/**
+ * Get risk assessment for current route
+ */
+async function getCurrentRouteRiskAssessment() {
+    if (window.routeData && window.routeData.stations && window.routeData.stations.length > 0) {
+        await updateRiskAssessment(window.routeData.stations);
+    } else {
+        console.log('⚠️ No route data available for risk assessment');
+        hideRiskWidget();
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     attachNavHandlers();
@@ -2714,4 +2826,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add "See why" functionality
     addSeeWhyListeners();
+    
+    // Initialize risk assessment
+    getCurrentRouteRiskAssessment();
 });

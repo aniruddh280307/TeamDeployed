@@ -137,6 +137,18 @@
                             <div class="widget-value" id="turbulenceValue">Light</div>
                             <div class="widget-description">Turbulence conditions</div>
                         </div>
+                        
+                        <div class="widget risk-widget" id="riskWidget" style="display: none;">
+                            <div class="widget-title">
+                                <span id="riskIcon">⚠️</span>
+                                Risk Assessment
+                            </div>
+                            <div class="widget-value" id="riskScoreValue">0/100</div>
+                            <div class="widget-description" id="riskDescription">Risk level assessment</div>
+                            <div class="risk-recommendations" id="riskRecommendations" style="display: none;">
+                                <!-- Risk recommendations will be displayed here -->
+                            </div>
+                        </div>
                     </div>
 
             <!-- Takeoff and Landing Weather Conditions Section -->
@@ -168,12 +180,7 @@
                                 <tr>
                                     <td class="flight-info-label">Total Distance</td>
                                     <td class="flight-info-value" id="totalDistance">Calculating...</td>
-                                    <td><span class="flight-info-status unknown">Calculating</span></td>
-                                </tr>
-                                <tr>
-                                    <td class="flight-info-label">Estimated Flight Time</td>
-                                    <td class="flight-info-value" id="flightTime">Calculated</td>
-                                    <td><span class="flight-info-status unknown">Calculated</span></td>
+                                    <td><span class="flight-info-status unknown">nil</span></td>
                                 </tr>
                                 <tr>
                                     <td class="flight-info-label">Weather Status</td>

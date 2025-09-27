@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Assessment Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .test-button:hover {
+            background: #2563eb;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 5px;
+            border-left: 4px solid #3b82f6;
+        }
+        .risk-item {
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 4px;
+            background: #f1f5f9;
+        }
+    </style>
+</style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎯 Aviation Weather Risk Assessment Test</h1>
+        <p>Test the enhanced risk assessment system with different scenarios:</p>
+        
+        <button class="test-button" onclick="testRiskAssessment(['KJFK', 'KLAX', 'KORD'])">
+            Test Major US Airports
+        </button>
+        
+        <button class="test-button" onclick="testRiskAssessment(['EGLL', 'LFPG', 'EDDF'])">
+            Test European Airports
+        </button>
+        
+        <button class="test-button" onclick="testRiskAssessment(['KJFK', 'EGLL', 'LFPG', 'EDDF'])">
+            Test Transatlantic Route
+        </button>
+        
+        <div id="result" class="result" style="display: none;">
+            <h3>Risk Assessment Results:</h3>
+            <div id="riskDetails"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testRiskAssessment(stations) {
+            const resultDiv = document.getElementById('result');
+            const detailsDiv = document.getElementById('riskDetails');
+            
+            resultDiv.style.display = 'block';
+            detailsDiv.innerHTML = '<p>Loading risk assessment...</p>';
+            
+            try {
+                const response = await fetch('/risk/assess', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ stations })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    displayRiskResults(result.data, stations);
+                } else {
+                    detailsDiv.innerHTML = `<p style="color: red;">Error: ${result.error || 'Unknown error'}</p>`;
+                }
+                
+            } catch (error) {
+                detailsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        function displayRiskResults(riskData, stations) {
+            const detailsDiv = document.getElementById('riskDetails');
+            
+            let html = `
+                <h4>Overall Risk: ${riskData.overallRisk}/100 - ${riskData.riskCategory.label}</h4>
+                <p><strong>Stations:</strong> ${stations.join(', ')}</p>
+                <p><strong>Action Required:</strong> ${riskData.riskCategory.action}</p>
+            `;
+            
+            if (riskData.individualRisks) {
+                html += '<h4>Individual Risk Parameters:</h4>';
+                
+                // Sort risks by score (highest first)
+                const sortedRisks = Object.entries(riskData.individualRisks)
+                    .sort(([,a], [,b]) => b - a);
+                
+                sortedRisks.forEach(([parameter, score]) => {
+                    const riskLevel = getRiskLevel(score);
+                    const riskEmoji = getRiskEmoji(riskLevel);
+                    const riskColor = getRiskColor(riskLevel);
+                    const parameterName = getParameterDisplayName(parameter);
+                    
+                    html += `
+                        <div class="risk-item" style="border-left: 4px solid ${getRiskBorderColor(riskLevel)};">
+                            ${riskEmoji} <strong>${parameterName}:</strong> ${score}/100 
+                            <span style="background: ${getRiskBackgroundColor(riskLevel)}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">
+                                ${riskLevel}
+                            </span>
+                        </div>
+                    `;
+                });
+            }
+            
+            if (riskData.recommendations && riskData.recommendations.length > 0) {
+                html += '<h4>Recommendations:</h4><ul>';
+                riskData.recommendations.forEach(rec => {
+                    html += `<li><strong>${rec.category}:</strong> ${rec.message}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            detailsDiv.innerHTML = html;
+        }
+        
+        function getRiskLevel(score) {
+            if (score >= 91) return 'Severe';
+            if (score >= 71) return 'High';
+            if (score >= 46) return 'Amber-High';
+            if (score >= 21) return 'Amber-Low';
+            return 'Low';
+        }
+        
+        function getRiskEmoji(riskLevel) {
+            switch (riskLevel) {
+                case 'Severe': return '🚨';
+                case 'High': return '⚠️';
+                case 'Amber-High': return '⚠️';
+                case 'Amber-Low': return '⚠️';
+                default: return '✅';
+            }
+        }
+        
+        function getRiskColor(riskLevel) {
+            switch (riskLevel) {
+                case 'Severe': return 'severe';
+                case 'High': return 'high';
+                case 'Amber-High': return 'amber-high';
+                case 'Amber-Low': return 'amber-low';
+                default: return 'low';
+            }
+        }
+        
+        function getRiskBorderColor(riskLevel) {
+            switch (riskLevel) {
+                case 'Severe': return '#dc2626';
+                case 'High': return '#ef4444';
+                case 'Amber-High': return '#f59e0b';
+                case 'Amber-Low': return '#fbbf24';
+                default: return '#10b981';
+            }
+        }
+        
+        function getRiskBackgroundColor(riskLevel) {
+            switch (riskLevel) {
+                case 'Severe': return '#dc2626';
+                case 'High': return '#ef4444';
+                case 'Amber-High': return '#f59e0b';
+                case 'Amber-Low': return '#fbbf24';
+                default: return '#10b981';
+            }
+        }
+        
+        function getParameterDisplayName(parameter) {
+            const names = {
+                visibility: 'Visibility',
+                ceiling: 'Ceiling',
+                wind: 'Wind',
+                temperature: 'Temperature',
+                turbulence: 'Turbulence',
+                icing: 'Icing',
+                sigmet: 'SIGMET',
+                afd: 'AFD'
+            };
+            return names[parameter] || parameter.charAt(0).toUpperCase() + parameter.slice(1);
+        }
+    </script>
+</body>
+</html>
