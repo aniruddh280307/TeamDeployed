@@ -164,6 +164,21 @@ document.getElementById('routeForm').addEventListener('submit', function(e) {
     // Process and store route data
     routeData = icaoInput.split(',').map(code => code.trim().toUpperCase());
     
+    // Store route data globally for access across functions
+    window.routeData = {
+        stations: routeData,
+        takeoff: routeData[0],
+        landing: routeData[routeData.length - 1],
+        waypoints: routeData.slice(1, -1)
+    };
+    
+    console.log('🛫 Route configured:', {
+        takeoff: window.routeData.takeoff,
+        landing: window.routeData.landing,
+        waypoints: window.routeData.waypoints,
+        totalStations: window.routeData.stations.length
+    });
+    
     // Navigate to page 2
     showPage(2);
     initializeDashboard();
@@ -224,9 +239,14 @@ function showPage(pageNumber) {
 
 // Page 2: Dashboard initialization
 async function initializeDashboard() {
-    // Set route title
-    document.getElementById('routeTitle').textContent = 
-        `${routeData[0]} → ${routeData[routeData.length - 1]}`;
+    // Set route title with takeoff and landing stations
+    const routeTitle = document.getElementById('routeTitle');
+    if (routeTitle && window.routeData) {
+        routeTitle.textContent = `${window.routeData.takeoff} → ${window.routeData.landing}`;
+    }
+    
+    // Update flight information section with takeoff and landing
+    updateFlightInformationDisplay();
     
     // Create animated map visualization
     createAnimatedMap();
@@ -289,9 +309,13 @@ async function createAnimatedMap() {
         // Create display name with real data
         const displayName = `${fullName}${city !== 'Unknown' ? ` - ${city}` : ''}${country ? `, ${country}` : ''}`;
         
-        // Determine pin type
+        // Determine pin type based on configured takeoff and landing stations
         let pinType = 'waypoint';
-        if (index === 0) {
+        if (window.routeData && window.routeData.takeoff && waypoint === window.routeData.takeoff) {
+            pinType = 'departure';
+        } else if (window.routeData && window.routeData.landing && waypoint === window.routeData.landing) {
+            pinType = 'destination';
+        } else if (index === 0) {
             pinType = 'departure';
         } else if (index === routeData.length - 1) {
             pinType = 'destination';
@@ -826,10 +850,31 @@ function updateCurrentWeatherConditions(weatherData) {
     const currentWeatherContent = document.getElementById('currentWeatherContent');
     if (!currentWeatherContent) return;
     
+    // Use configured takeoff and landing stations if available
+    let takeoffStation, landingStation;
+    if (window.routeData && window.routeData.takeoff && window.routeData.landing) {
+        takeoffStation = window.routeData.takeoff;
+        landingStation = window.routeData.landing;
+        console.log(`🛫 Using configured stations - Takeoff: ${takeoffStation}, Landing: ${landingStation}`);
+    }
+    
     if (weatherData.metar && weatherData.metar.length >= 2) {
-        // Get takeoff (first) and landing (last) airports
-        const takeoffMetar = weatherData.metar[0];
-        const landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        // Get takeoff and landing airports based on configured stations
+        let takeoffMetar, landingMetar;
+        
+        if (takeoffStation && landingStation) {
+            // Find METAR data for configured takeoff and landing stations
+            takeoffMetar = weatherData.metar.find(metar => metar.icaoId === takeoffStation);
+            landingMetar = weatherData.metar.find(metar => metar.icaoId === landingStation);
+            
+            // Fallback to first and last if not found
+            if (!takeoffMetar) takeoffMetar = weatherData.metar[0];
+            if (!landingMetar) landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        } else {
+            // Default to first and last airports
+            takeoffMetar = weatherData.metar[0];
+            landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        }
         
         const takeoffDecoded = decodeMETAR(takeoffMetar);
         const landingDecoded = decodeMETAR(landingMetar);
@@ -1203,6 +1248,53 @@ function updateDashboardComponents(weatherData, stations) {
     // Create enhanced route map with hover tooltips
     if (stations && stations.length > 0) {
         createEnhancedRouteMap(stations);
+    }
+}
+
+// Update flight information display with takeoff and landing stations
+function updateFlightInformationDisplay() {
+    console.log('🛫 Updating flight information display with takeoff and landing stations');
+    
+    if (!window.routeData || !window.routeData.stations || window.routeData.stations.length < 2) {
+        console.log('⚠️ No route data available for flight information display');
+        return;
+    }
+    
+    // Update departure airport
+    const departureElement = document.getElementById('departureAirport');
+    if (departureElement) {
+        const takeoffStation = window.routeData.takeoff;
+        const takeoffName = getAirportName(takeoffStation);
+        departureElement.textContent = `${takeoffStation} - ${takeoffName}`;
+        console.log(`🛫 Takeoff station: ${takeoffStation} - ${takeoffName}`);
+    }
+    
+    // Update arrival airport
+    const arrivalElement = document.getElementById('arrivalAirport');
+    if (arrivalElement) {
+        const landingStation = window.routeData.landing;
+        const landingName = getAirportName(landingStation);
+        arrivalElement.textContent = `${landingStation} - ${landingName}`;
+        console.log(`🛬 Landing station: ${landingStation} - ${landingName}`);
+    }
+    
+    // Update route display
+    const routeElement = document.getElementById('flightRoute');
+    if (routeElement) {
+        routeElement.textContent = `${window.routeData.takeoff} → ${window.routeData.landing}`;
+    }
+    
+    // Update route complexity based on number of waypoints
+    const complexityElement = document.getElementById('routeComplexity');
+    if (complexityElement) {
+        const waypointCount = window.routeData.waypoints.length;
+        if (waypointCount === 0) {
+            complexityElement.textContent = 'Direct';
+        } else if (waypointCount <= 2) {
+            complexityElement.textContent = 'Standard';
+        } else {
+            complexityElement.textContent = 'Complex';
+        }
     }
 }
 
@@ -2457,7 +2549,12 @@ async function performSearch(query) {
         let searchUrl = `${BACKEND_API_CONFIG.baseUrl}/search/focused?query=${encodeURIComponent(query)}`;
         
         // Add route stations if they exist (from Page 1)
-        if (routeData && routeData.length > 0) {
+        if (window.routeData && window.routeData.stations && window.routeData.stations.length > 0) {
+            const stationsParam = window.routeData.stations.join(',');
+            searchUrl += `&stations=${encodeURIComponent(stationsParam)}`;
+            console.log(`🎯 Searching with configured route stations: ${stationsParam}`);
+            console.log(`🛫 Takeoff: ${window.routeData.takeoff}, Landing: ${window.routeData.landing}`);
+        } else if (routeData && routeData.length > 0) {
             const stationsParam = routeData.join(',');
             searchUrl += `&stations=${encodeURIComponent(stationsParam)}`;
             console.log(`🎯 Searching with route stations: ${stationsParam}`);
@@ -2812,6 +2909,8 @@ function hideRiskWidget() {
  */
 async function getCurrentRouteRiskAssessment() {
     if (window.routeData && window.routeData.stations && window.routeData.stations.length > 0) {
+        console.log(`🎯 Risk assessment for route: ${window.routeData.takeoff} → ${window.routeData.landing}`);
+        console.log(`📍 Stations: ${window.routeData.stations.join(', ')}`);
         await updateRiskAssessment(window.routeData.stations);
     } else {
         console.log('⚠️ No route data available for risk assessment');
