@@ -164,6 +164,21 @@ document.getElementById('routeForm').addEventListener('submit', function(e) {
     // Process and store route data
     routeData = icaoInput.split(',').map(code => code.trim().toUpperCase());
     
+    // Store route data globally for access across functions
+    window.routeData = {
+        stations: routeData,
+        takeoff: routeData[0],
+        landing: routeData[routeData.length - 1],
+        waypoints: routeData.slice(1, -1)
+    };
+    
+    console.log('🛫 Route configured:', {
+        takeoff: window.routeData.takeoff,
+        landing: window.routeData.landing,
+        waypoints: window.routeData.waypoints,
+        totalStations: window.routeData.stations.length
+    });
+    
     // Navigate to page 2
     showPage(2);
     initializeDashboard();
@@ -224,9 +239,14 @@ function showPage(pageNumber) {
 
 // Page 2: Dashboard initialization
 async function initializeDashboard() {
-    // Set route title
-    document.getElementById('routeTitle').textContent = 
-        `${routeData[0]} → ${routeData[routeData.length - 1]}`;
+    // Set route title with takeoff and landing stations
+    const routeTitle = document.getElementById('routeTitle');
+    if (routeTitle && window.routeData) {
+        routeTitle.textContent = `${window.routeData.takeoff} → ${window.routeData.landing}`;
+    }
+    
+    // Update flight information section with takeoff and landing
+    updateFlightInformationDisplay();
     
     // Create animated map visualization
     createAnimatedMap();
@@ -289,9 +309,13 @@ async function createAnimatedMap() {
         // Create display name with real data
         const displayName = `${fullName}${city !== 'Unknown' ? ` - ${city}` : ''}${country ? `, ${country}` : ''}`;
         
-        // Determine pin type
+        // Determine pin type based on configured takeoff and landing stations
         let pinType = 'waypoint';
-        if (index === 0) {
+        if (window.routeData && window.routeData.takeoff && waypoint === window.routeData.takeoff) {
+            pinType = 'departure';
+        } else if (window.routeData && window.routeData.landing && waypoint === window.routeData.landing) {
+            pinType = 'destination';
+        } else if (index === 0) {
             pinType = 'departure';
         } else if (index === routeData.length - 1) {
             pinType = 'destination';
@@ -307,7 +331,7 @@ async function createAnimatedMap() {
     
     // Animate flight progress
     setTimeout(() => {
-        flightProgress.style.left = '90%';
+        flightProgress.style.left = '92%';
     }, 1000);
     
     // Load aviation weather summary
@@ -510,7 +534,83 @@ function formatSummaryText(text) {
         .join('');
 }
 
-// Format weather briefing summary with enhanced headings
+// Format weather briefing summary in original format with categories
+function formatOriginalWeatherBriefing(text) {
+    if (!text) return '<div class="no-data">No weather briefing summary available</div>';
+    
+    // Split the text into lines and process each line
+    const lines = text.split('\n').filter(line => line.trim());
+    let html = '';
+    let currentCategory = '';
+    let titleAdded = false;
+    
+    for (const line of lines) {
+        // Handle main title (only add once)
+        if (line.includes('🌤️ WEATHER BRIEFING SUMMARY') && !titleAdded) {
+            html += `<div class="weather-briefing-title">${line}</div>`;
+            titleAdded = true;
+        }
+        // Handle Overview category
+        else if (line.includes('📊 OVERVIEW:')) {
+            currentCategory = 'overview';
+            html += `<div class="category-header overview-header">📊 OVERVIEW</div>`;
+        }
+        // Handle Attention category
+        else if (line.includes('⚠️ ATTENTION:')) {
+            currentCategory = 'attention';
+            html += `<div class="category-header attention-header">⚠️ ATTENTION</div>`;
+        }
+        // Handle bullet points with tags and "See why" links
+        else if (line.startsWith('•')) {
+            // Extract the main content, tags, and "See why" link
+            let content = line.replace(/<[^>]*>/g, ''); // Remove HTML tags for processing
+            // Remove any "see why" text that appears in the content
+            content = content.replace(/\s*see why\s*/gi, '').trim();
+            
+            const hasTags = line.includes('<span class="tag');
+            const hasSeeWhy = line.includes('<a href="#" class="see-why"');
+            
+            let bulletHtml = `<div class="summary-bullet ${currentCategory}-bullet">`;
+            bulletHtml += `<div class="bullet-content">`;
+            bulletHtml += content;
+            bulletHtml += `</div>`;
+            
+            // Add tags and "See why" link in a flex container for proper alignment
+            if (hasTags || hasSeeWhy) {
+                bulletHtml += `<div class="bullet-actions">`;
+                
+                // Extract the HTML parts from the original line
+                const tagMatch = line.match(/<span class="tag[^"]*"[^>]*>([^<]*)<\/span>/);
+                const seeWhyMatch = line.match(/<a href="#" class="see-why"[^>]*>([^<]*)<\/a>/);
+                
+                if (tagMatch) {
+                    bulletHtml += `<span class="tag ${tagMatch[1].toLowerCase().replace(/\s+/g, '-')}">${tagMatch[1]}</span>`;
+                }
+                if (seeWhyMatch) {
+                    // Extract data attributes for the "See why" link
+                    const dataStation = line.match(/data-station="([^"]*)"/);
+                    const dataType = line.match(/data-type="([^"]*)"/);
+                    const dataAttrs = dataStation && dataType ? 
+                        `data-station="${dataStation[1]}" data-type="${dataType[1]}"` : '';
+                    bulletHtml += `<a href="#" class="see-why" ${dataAttrs}>See why</a>`;
+                }
+                
+                bulletHtml += `</div>`;
+            }
+            
+            bulletHtml += '</div>';
+            html += bulletHtml;
+        }
+        // Handle other content
+        else {
+            html += `<div class="summary-text">${line}</div>`;
+        }
+    }
+    
+    return html;
+}
+
+// Format weather briefing summary with enhanced headings (legacy function)
 function formatWeatherBriefing(text) {
     if (!text) return '<div class="no-data">No weather briefing summary available</div>';
     
@@ -633,25 +733,53 @@ function updateProfessionalWidgets(weatherData) {
     // Update Visibility Widget
     if (weatherData.metar && weatherData.metar.length > 0) {
         const metar = weatherData.metar[0];
-        const visibility = metar.vis || 0;
-        const visibilityText = visibility >= 10 ? '10+ miles' : `${visibility} miles`;
+        const visibility = metar.visib || 'N/A';
+        let visibilityText = 'N/A';
+        
+        console.log('🔍 Visibility widget debug:', { visibility, metar: metar.icaoId });
+        
+        if (visibility === '10+') {
+            visibilityText = '10+ miles';
+        } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+            visibilityText = visibility;
+        } else if (typeof visibility === 'number') {
+            visibilityText = visibility >= 10 ? '10+ miles' : `${visibility} miles`;
+        }
+        
+        console.log('🔍 Visibility text:', visibilityText);
+        
         const visibilityElement = document.getElementById('visibilityValue');
         if (visibilityElement) {
             visibilityElement.textContent = visibilityText;
+            console.log('✅ Visibility widget updated:', visibilityText);
+        } else {
+            console.error('❌ Visibility element not found!');
         }
+    } else {
+        console.log('❌ No METAR data available for visibility widget');
     }
     
     // Update Weather Score Widget
     let weatherScore = 85; // Default score
     if (weatherData.metar && weatherData.metar.length > 0) {
         const metar = weatherData.metar[0];
-        const visibility = metar.vis || 0;
-        const windSpeed = metar.windSpeed || 0;
+        const visibility = metar.visib || 'N/A';
+        const windSpeed = metar.wspd || 0;
         
         // Calculate weather score based on conditions
-        if (visibility >= 10 && windSpeed < 20) weatherScore = 95;
-        else if (visibility >= 5 && windSpeed < 30) weatherScore = 80;
-        else if (visibility >= 3 && windSpeed < 40) weatherScore = 65;
+        let visibilityValue = 0;
+        if (visibility === '10+') {
+            visibilityValue = 10;
+        } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+            const match = visibility.match(/(\d+(?:\.\d+)?)/);
+            visibilityValue = match ? parseFloat(match[1]) : 0;
+        } else if (typeof visibility === 'number') {
+            visibilityValue = visibility;
+        }
+        
+        if (visibilityValue >= 10 && windSpeed < 20) weatherScore = 95;
+        else if (visibilityValue >= 5 && windSpeed < 30) weatherScore = 80;
+        else if (visibilityValue >= 3 && windSpeed < 40) weatherScore = 65;
         else weatherScore = 45;
     }
     
@@ -670,13 +798,48 @@ function updateProfessionalWidgets(weatherData) {
     const windConditionsElement = document.getElementById('windConditionsValue');
     if (windConditionsElement && weatherData.metar && weatherData.metar.length > 0) {
         const metar = weatherData.metar[0];
-        const windSpeed = metar.windSpeed || 0;
-        const windDirection = metar.windDir || 0;
+        const windSpeed = metar.wspd || 0;
+        const windDirection = metar.wdir || 0;
         if (windSpeed > 0 && windDirection >= 0) {
-            windConditionsElement.textContent = `${windSpeed}kt ${windDirection}°`;
+            const directionText = getWindDirection(windDirection);
+            windConditionsElement.textContent = `${windSpeed}kt ${directionText}`;
         } else {
             windConditionsElement.textContent = 'Calm';
         }
+    }
+    
+    // Update Temperature Widget
+    const temperatureElement = document.getElementById('temperatureValue');
+    if (temperatureElement && weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const temperature = metar.temp;
+        if (temperature !== null && temperature !== undefined) {
+            temperatureElement.textContent = `${Math.round(temperature)}°C`;
+        } else {
+            temperatureElement.textContent = 'N/A';
+        }
+    }
+    
+    // Update Turbulence Widget
+    const turbulenceElement = document.getElementById('turbulenceValue');
+    if (turbulenceElement && weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const windSpeed = metar.wspd || 0;
+        const windGust = metar.wgst || 0;
+        const maxWind = Math.max(windSpeed, windGust);
+        
+        let turbulenceLevel = 'Light';
+        if (maxWind > 30) {
+            turbulenceLevel = 'Severe';
+        } else if (maxWind > 20) {
+            turbulenceLevel = 'Moderate';
+        } else if (maxWind > 15) {
+            turbulenceLevel = 'Light-Moderate';
+        } else {
+            turbulenceLevel = 'Light';
+        }
+        
+        turbulenceElement.textContent = turbulenceLevel;
     }
 }
 
@@ -687,10 +850,31 @@ function updateCurrentWeatherConditions(weatherData) {
     const currentWeatherContent = document.getElementById('currentWeatherContent');
     if (!currentWeatherContent) return;
     
+    // Use configured takeoff and landing stations if available
+    let takeoffStation, landingStation;
+    if (window.routeData && window.routeData.takeoff && window.routeData.landing) {
+        takeoffStation = window.routeData.takeoff;
+        landingStation = window.routeData.landing;
+        console.log(`🛫 Using configured stations - Takeoff: ${takeoffStation}, Landing: ${landingStation}`);
+    }
+    
     if (weatherData.metar && weatherData.metar.length >= 2) {
-        // Get takeoff (first) and landing (last) airports
-        const takeoffMetar = weatherData.metar[0];
-        const landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        // Get takeoff and landing airports based on configured stations
+        let takeoffMetar, landingMetar;
+        
+        if (takeoffStation && landingStation) {
+            // Find METAR data for configured takeoff and landing stations
+            takeoffMetar = weatherData.metar.find(metar => metar.icaoId === takeoffStation);
+            landingMetar = weatherData.metar.find(metar => metar.icaoId === landingStation);
+            
+            // Fallback to first and last if not found
+            if (!takeoffMetar) takeoffMetar = weatherData.metar[0];
+            if (!landingMetar) landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        } else {
+            // Default to first and last airports
+            takeoffMetar = weatherData.metar[0];
+            landingMetar = weatherData.metar[weatherData.metar.length - 1];
+        }
         
         const takeoffDecoded = decodeMETAR(takeoffMetar);
         const landingDecoded = decodeMETAR(landingMetar);
@@ -992,14 +1176,14 @@ function decodeMETAR(metar) {
     const windDir = metar.windDir || 0;
     const windSpeed = metar.windSpeed || 0;
     const windGust = metar.windGust || 0;
-    const visibility = metar.vis || 0;
+    const visibility = metar.visib || 'N/A';
     const temperature = metar.temp || 0;
     const dewPoint = metar.dewp || 0;
     const pressure = metar.altim || 0;
     
     return {
         wind: windDir && windSpeed ? `${getWindDirection(windDir)} at ${windSpeed} kts${windGust ? `, gusts ${windGust} kts` : ''}` : 'No wind data',
-        visibility: visibility ? `${visibility} miles` : 'No visibility data',
+        visibility: visibility && visibility !== 'N/A' ? `${visibility}` : 'No visibility data',
         temperature: temperature ? `${temperature}°C (dew point: ${dewPoint}°C)` : 'No temperature data',
         pressure: pressure ? `${pressure} hPa` : 'No pressure data'
     };
@@ -1025,12 +1209,12 @@ function displaySummaryPoints(points) {
     summaryPoints.style.display = 'block';
     
     if (Array.isArray(points) && points.length > 0) {
-        // Display weather briefing summary with enhanced headings
+        // Display weather briefing summary in original format
         const weatherBriefing = points[0];
-        summaryPoints.innerHTML = formatWeatherBriefing(weatherBriefing);
+        summaryPoints.innerHTML = formatOriginalWeatherBriefing(weatherBriefing);
     } else if (typeof points === 'string') {
         // Single string format
-        summaryPoints.innerHTML = formatWeatherBriefing(points);
+        summaryPoints.innerHTML = formatOriginalWeatherBriefing(points);
     } else {
         // Fallback
         summaryPoints.innerHTML = '<div class="no-data">No weather briefing summary available</div>';
@@ -1046,6 +1230,11 @@ function displaySummaryPoints(points) {
 // Enhanced function to update all dashboard components
 function updateDashboardComponents(weatherData, stations) {
     console.log('🚀 Updating all dashboard components with data:', weatherData);
+    console.log('🔍 Weather data structure:', {
+        hasMetar: !!(weatherData.metar && weatherData.metar.length > 0),
+        metarCount: weatherData.metar ? weatherData.metar.length : 0,
+        firstMetar: weatherData.metar && weatherData.metar.length > 0 ? weatherData.metar[0] : null
+    });
     
     // Update professional widgets
     updateProfessionalWidgets(weatherData);
@@ -1062,15 +1251,61 @@ function updateDashboardComponents(weatherData, stations) {
     }
 }
 
+// Update flight information display with takeoff and landing stations
+function updateFlightInformationDisplay() {
+    console.log('🛫 Updating flight information display with takeoff and landing stations');
+    
+    if (!window.routeData || !window.routeData.stations || window.routeData.stations.length < 2) {
+        console.log('⚠️ No route data available for flight information display');
+        return;
+    }
+    
+    // Update departure airport
+    const departureElement = document.getElementById('departureAirport');
+    if (departureElement) {
+        const takeoffStation = window.routeData.takeoff;
+        const takeoffName = getAirportName(takeoffStation);
+        departureElement.textContent = `${takeoffStation} - ${takeoffName}`;
+        console.log(`🛫 Takeoff station: ${takeoffStation} - ${takeoffName}`);
+    }
+    
+    // Update arrival airport
+    const arrivalElement = document.getElementById('arrivalAirport');
+    if (arrivalElement) {
+        const landingStation = window.routeData.landing;
+        const landingName = getAirportName(landingStation);
+        arrivalElement.textContent = `${landingStation} - ${landingName}`;
+        console.log(`🛬 Landing station: ${landingStation} - ${landingName}`);
+    }
+    
+    // Update route display
+    const routeElement = document.getElementById('flightRoute');
+    if (routeElement) {
+        routeElement.textContent = `${window.routeData.takeoff} → ${window.routeData.landing}`;
+    }
+    
+    // Update route complexity based on number of waypoints
+    const complexityElement = document.getElementById('routeComplexity');
+    if (complexityElement) {
+        const waypointCount = window.routeData.waypoints.length;
+        if (waypointCount === 0) {
+            complexityElement.textContent = 'Direct';
+        } else if (waypointCount <= 2) {
+            complexityElement.textContent = 'Standard';
+        } else {
+            complexityElement.textContent = 'Complex';
+        }
+    }
+}
+
 // Update flight information with comprehensive data
 function updateFlightInformation(weatherData, stations) {
     console.log('✈️ Updating flight information with data:', weatherData, stations);
     
     if (!stations || stations.length < 2) return;
     
-    // Calculate flight distance and time
+    // Calculate flight distance
     const distance = calculateFlightDistance(stations);
-    const flightTime = calculateFlightTime(distance);
     const route = `${stations[0]} → ${stations[stations.length - 1]}`;
     
     // Update route
@@ -1085,11 +1320,6 @@ function updateFlightInformation(weatherData, stations) {
         distanceElement.textContent = `${distance.toFixed(0)} nm`;
     }
     
-    // Update flight time
-    const timeElement = document.getElementById('flightTime');
-    if (timeElement) {
-        timeElement.textContent = `${flightTime.hours}h ${flightTime.minutes}m`;
-    }
     
     // Update weather status
     const weatherStatusElement = document.getElementById('weatherStatus');
@@ -1142,14 +1372,6 @@ function calculateFlightDistance(stations) {
     return baseDistance + (stationCount * distancePerStation);
 }
 
-// Calculate flight time based on distance
-function calculateFlightTime(distance) {
-    const averageSpeed = 500; // knots
-    const totalMinutes = (distance / averageSpeed) * 60;
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = Math.round(totalMinutes % 60);
-    return { hours, minutes };
-}
 
 // Analyze weather status
 function analyzeWeatherStatus(weatherData) {
@@ -1161,10 +1383,20 @@ function analyzeWeatherStatus(weatherData) {
     let totalConditions = 0;
     
     weatherData.metar.forEach(metar => {
-        const visibility = metar.vis || 0;
-        const windSpeed = metar.windSpeed || 0;
+        const visibility = metar.visib || 'N/A';
+        const windSpeed = metar.wspd || 0;
         
-        if (visibility >= 5 && windSpeed < 30) {
+        let visibilityValue = 0;
+        if (visibility === '10+') {
+            visibilityValue = 10;
+        } else if (typeof visibility === 'string' && visibility.includes('SM')) {
+            const match = visibility.match(/(\d+(?:\.\d+)?)/);
+            visibilityValue = match ? parseFloat(match[1]) : 0;
+        } else if (typeof visibility === 'number') {
+            visibilityValue = visibility;
+        }
+        
+        if (visibilityValue >= 5 && windSpeed < 30) {
             goodConditions++;
         }
         totalConditions++;
@@ -1480,7 +1712,7 @@ function formatTechnicalData(data, dataType) {
                     <span class="data-label">Station:</span> ${metar.stationId || 'N/A'}<br>
                     <span class="data-label">Temperature:</span> ${metar.temp ? `${metar.temp}°C` : 'N/A'}<br>
                     <span class="data-label">Wind:</span> ${metar.wdir ? `${metar.wdir}°` : 'N/A'} ${metar.wspd ? `${metar.wspd}kt` : ''} ${metar.wgst ? `G${metar.wgst}` : ''}<br>
-                    <span class="data-label">Visibility:</span> ${metar.vis ? `${metar.vis} SM` : 'N/A'}<br>
+                    <span class="data-label">Visibility:</span> ${metar.visib ? `${metar.visib}` : 'N/A'}<br>
                     <span class="data-label">Raw METAR:</span> ${metar.rawOb || 'N/A'}<br>
                 </div>
             `;
@@ -1572,8 +1804,8 @@ async function getVisibilityFromMetarTaf(icaoCode) {
         
         if (metarData && Array.isArray(metarData) && metarData.length > 0) {
             const metar = metarData[0];
-            if (metar.visibility) {
-                return normalizeVisibility(metar.visibility);
+            if (metar.visib) {
+                return normalizeVisibility(metar.visib);
             }
         }
         
@@ -1841,11 +2073,11 @@ function parseMetarData(metarData) {
     
     // Extract visibility
     let visibility = 'N/A';
-    if (metar.vis && metar.vis !== null) {
-        if (metar.vis >= 10) {
+    if (metar.visib && metar.visib !== null) {
+        if (metar.visib === '10+') {
             visibility = '10+ SM';
         } else {
-            visibility = `${metar.vis} SM`;
+            visibility = `${metar.visib}`;
         }
     } else if (metar.rawOb) {
         // Try to parse visibility from raw METAR
@@ -1970,8 +2202,8 @@ async function updateVisibilityWidget(data) {
         // Try METAR first (current conditions)
         if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
             const metar = data.metar[0];
-            if (metar.vis !== null && metar.vis !== undefined) {
-                visibility = normalizeVisibility(metar.vis);
+            if (metar.visib !== null && metar.visib !== undefined) {
+                visibility = normalizeVisibility(metar.visib);
             }
         }
         
@@ -2014,8 +2246,8 @@ async function updateWeatherScoreWidget(data) {
         // Get visibility data
         if (data.metar && Array.isArray(data.metar) && data.metar.length > 0) {
             const metar = data.metar[0];
-            if (metar.vis !== null && metar.vis !== undefined) {
-                const visData = normalizeVisibility(metar.vis);
+            if (metar.visib !== null && metar.visib !== undefined) {
+                const visData = normalizeVisibility(metar.visib);
                 visKm = visData.km;
             }
         }
@@ -2180,23 +2412,28 @@ function normalizeVisibility(raw) {
     if (typeof raw === 'number') {
         km = raw > 100 ? raw / 1000 : raw; // if meters, convert
     } else if (typeof raw === 'string') {
-        // METAR format: "10SM", "6SM", "9999" (meters), "1/2SM"
-        const smMatch = raw.match(/([0-9]+(?:\/[0-9]+)?)\s*SM/i);
-        const meterMatch = raw.match(/^([0-9]+)$/);
-        const fractionMatch = raw.match(/([0-9]+)\/([0-9]+)\s*SM/i);
-        
-        if (fractionMatch) {
-            const numerator = parseInt(fractionMatch[1]);
-            const denominator = parseInt(fractionMatch[2]);
-            km = (numerator / denominator) * 1.60934;
-        } else if (smMatch) {
-            km = parseFloat(smMatch[1]) * 1.60934;
-        } else if (meterMatch) {
-            km = parseInt(meterMatch[1], 10) / 1000;
+        // Handle special cases first
+        if (raw === '10+') {
+            km = 10 * 1.60934; // 10+ miles = 16+ km
+        } else {
+            // METAR format: "10SM", "6SM", "9999" (meters), "1/2SM"
+            const smMatch = raw.match(/([0-9]+(?:\/[0-9]+)?)\s*SM/i);
+            const meterMatch = raw.match(/^([0-9]+)$/);
+            const fractionMatch = raw.match(/([0-9]+)\/([0-9]+)\s*SM/i);
+            
+            if (fractionMatch) {
+                const numerator = parseInt(fractionMatch[1]);
+                const denominator = parseInt(fractionMatch[2]);
+                km = (numerator / denominator) * 1.60934;
+            } else if (smMatch) {
+                km = parseFloat(smMatch[1]) * 1.60934;
+            } else if (meterMatch) {
+                km = parseInt(meterMatch[1], 10) / 1000;
+            }
         }
     }
     
-    const display = km == null ? 'N/A' : `${km.toFixed(1)} km`;
+    const display = km == null ? 'N/A' : raw === '10+' ? '10+ miles' : `${km.toFixed(1)} km`;
     const badge = km == null ? 'unknown' : km >= 8 ? 'good' : km >= 5 ? 'moderate' : 'poor';
     return { display, km, badge };
 }
@@ -2274,13 +2511,8 @@ function updateFlightInfo() {
             // const distanceData = await calculateFlightDistance(routeData);
             // document.getElementById('totalDistance').textContent = `${distanceData.distance} NM`;
             
-            // EXAMPLE: Call flight time estimation API  
-            // const timeData = await estimateFlightTime(routeData);
-            // document.getElementById('flightTime').textContent = timeData.formattedTime;
-            
             // For now, showing simulated data
-            document.getElementById('totalDistance').textContent = `${Math.floor(Math.random() * 3000 + 1000)} NM`;
-            document.getElementById('flightTime').textContent = `${Math.floor(Math.random() * 8 + 2)}h ${Math.floor(Math.random() * 60)}m`;
+            document.getElementById('totalDistance').textContent = `${Math.floor(Math.random() * 3000 + 1000)} nm`;
             document.getElementById('weatherStatus').textContent = 'Favorable';
             document.getElementById('routeComplexity').textContent = routeData.length > 3 ? 'Complex' : 'Standard';
         } catch (error) {
@@ -2313,32 +2545,115 @@ async function performSearch(query) {
     resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Searching aviation weather data...</p>';
     
     try {
-        // Search across multiple aviation APIs
-        const searchResults = await searchAviationData(query);
+        // Build URL with route stations if available
+        let searchUrl = `${BACKEND_API_CONFIG.baseUrl}/search/focused?query=${encodeURIComponent(query)}`;
         
-        if (searchResults && searchResults.length > 0) {
-            resultsContainer.innerHTML = '';
-            
-            searchResults.forEach(result => {
-                const resultElement = document.createElement('div');
-                resultElement.className = 'result-item';
-                resultElement.innerHTML = `
-                    <h4>${result.title}</h4>
-                    <p>${result.description}</p>
-                    <div class="result-meta">
-                        <span class="result-source">${result.source}</span>
-                        <span class="result-time">${result.time}</span>
-                    </div>
-                `;
-                resultsContainer.appendChild(resultElement);
-            });
+        // Add route stations if they exist (from Page 1)
+        if (window.routeData && window.routeData.stations && window.routeData.stations.length > 0) {
+            const stationsParam = window.routeData.stations.join(',');
+            searchUrl += `&stations=${encodeURIComponent(stationsParam)}`;
+            console.log(`🎯 Searching with configured route stations: ${stationsParam}`);
+            console.log(`🛫 Takeoff: ${window.routeData.takeoff}, Landing: ${window.routeData.landing}`);
+        } else if (routeData && routeData.length > 0) {
+            const stationsParam = routeData.join(',');
+            searchUrl += `&stations=${encodeURIComponent(stationsParam)}`;
+            console.log(`🎯 Searching with route stations: ${stationsParam}`);
         } else {
-            resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">No aviation weather data found for your search</p>';
+            console.log(`🎯 No route stations found, using default airports`);
         }
         
+        // Use focused search API for targeted results
+        const response = await fetch(searchUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const searchData = await response.json();
+        
+        if (searchData.results && searchData.results.length > 0) {
+            resultsContainer.innerHTML = '';
+            
+            // Display focused search results
+            searchData.results.forEach(result => {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'result-item focused-result';
+                
+                // Create focused display showing only the requested parameter
+                let resultHTML = `
+                    <div class="result-header">
+                        <h4>${result.stationName} (${result.station})</h4>
+                        <span class="result-type-badge focused">Focused</span>
+                    </div>
+                    <div class="result-content">
+                        <div class="focused-data">
+                `;
+                
+                // Display only the requested parameters
+                Object.entries(result.data).forEach(([key, value]) => {
+                    const label = key.charAt(0).toUpperCase() + key.slice(1);
+                    resultHTML += `
+                        <div class="parameter-item">
+                            <span class="parameter-label">${label}:</span>
+                            <span class="parameter-value">${value}</span>
+                        </div>
+                    `;
+                });
+                
+                resultHTML += `
+                        </div>
+                        <div class="result-meta">
+                            <span class="result-source">Focused Search</span>
+                            <span class="result-time">${new Date(result.timestamp * 1000).toLocaleString()}</span>
+                        </div>
+                    </div>
+                `;
+                
+                resultElement.innerHTML = resultHTML;
+                resultsContainer.appendChild(resultElement);
+            });
+            
+            // Add search summary
+            const summaryElement = document.createElement('div');
+            summaryElement.className = 'search-summary';
+            
+            let summaryText = `Found ${searchData.results.length} latest report(s) for "${query}"`;
+            if (searchData.stations && searchData.stations.length > 0) {
+                summaryText += ` from your route stations (${searchData.stations.join(', ')})`;
+            } else {
+                summaryText += ` from major airports`;
+            }
+            summaryText += `<br><small>Showing most recent data per station</small>`;
+            
+            summaryElement.innerHTML = `<p>${summaryText}</p>`;
+            resultsContainer.insertBefore(summaryElement, resultsContainer.firstChild);
+            
+        } else {
+            resultsContainer.innerHTML = `
+                <div class="no-results">
+                    <h3>No Results Found</h3>
+                    <p>No aviation weather data found for "${query}"</p>
+                    <div class="search-suggestions">
+                        <h4>Try searching for:</h4>
+                        <ul>
+                            <li>Weather conditions: "humidity", "temperature", "wind", "visibility"</li>
+                            <li>Airport codes: "KJFK", "EGLL", "LFPG"</li>
+                            <li>Weather phenomena: "thunderstorm", "fog", "turbulence"</li>
+                            <li>Flight conditions: "VFR", "IFR", "MVFR"</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
     } catch (error) {
-        console.error('Search failed:', error);
-        resultsContainer.innerHTML = '<p style="text-align: center; padding: 20px;">Search unavailable. Please try again later.</p>';
+        console.error('Search error:', error);
+        resultsContainer.innerHTML = `
+            <div class="search-error">
+                <h3>Search Unavailable</h3>
+                <p>Unable to search aviation weather data. Please try again later.</p>
+                <p><small>Error: ${error.message}</small></p>
+            </div>
+        `;
     }
 }
 
@@ -2470,6 +2785,139 @@ function attachNavHandlers() {
     if (btn3) btn3.addEventListener('click', () => toPage(3));
 }
 
+// ==================== RISK ASSESSMENT FUNCTIONS ====================
+
+/**
+ * Update risk assessment widget
+ */
+async function updateRiskAssessment(stations) {
+    try {
+        console.log('🎯 Updating risk assessment for stations:', stations);
+        
+        const response = await fetch('/risk/dashboard', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ stations })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Risk assessment failed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            displayRiskAssessment(result.data);
+        } else {
+            console.error('❌ Risk assessment failed:', result.error);
+            hideRiskWidget();
+        }
+        
+    } catch (error) {
+        console.error('❌ Risk assessment error:', error);
+        hideRiskWidget();
+    }
+}
+
+/**
+ * Display risk assessment in the widget
+ */
+function displayRiskAssessment(riskData) {
+    const riskWidget = document.getElementById('riskWidget');
+    const riskIcon = document.getElementById('riskIcon');
+    const riskScoreValue = document.getElementById('riskScoreValue');
+    const riskDescription = document.getElementById('riskDescription');
+    const riskRecommendations = document.getElementById('riskRecommendations');
+    
+    if (!riskWidget || !riskIcon || !riskScoreValue || !riskDescription) {
+        console.error('❌ Risk widget elements not found');
+        return;
+    }
+    
+    // Show the widget
+    riskWidget.style.display = 'block';
+    
+    // Update risk score and description
+    riskScoreValue.textContent = `${riskData.riskScore}/100`;
+    riskDescription.textContent = riskData.riskLevel;
+    
+    // Update icon and styling based on risk level
+    updateRiskWidgetStyling(riskWidget, riskIcon, riskData.riskColor, riskData.riskLevel);
+    
+    // Update recommendations
+    if (riskData.recommendations && riskData.recommendations.length > 0) {
+        displayRiskRecommendations(riskRecommendations, riskData.recommendations);
+    } else {
+        riskRecommendations.style.display = 'none';
+    }
+}
+
+/**
+ * Update risk widget styling based on risk level
+ */
+function updateRiskWidgetStyling(widget, icon, color, level) {
+    // Remove existing risk classes
+    widget.classList.remove('low-risk', 'amber-risk', 'high-risk', 'severe-risk');
+    
+    // Update icon
+    if (color === 'red' && level.includes('Severe')) {
+        icon.textContent = '🚨';
+        widget.classList.add('severe-risk');
+    } else if (color === 'red') {
+        icon.textContent = '⚠️';
+        widget.classList.add('high-risk');
+    } else if (color === 'amber') {
+        icon.textContent = '⚠️';
+        widget.classList.add('amber-risk');
+    } else {
+        icon.textContent = '✅';
+        widget.classList.add('low-risk');
+    }
+}
+
+/**
+ * Display risk recommendations
+ */
+function displayRiskRecommendations(container, recommendations) {
+    if (!container) return;
+    
+    container.innerHTML = '';
+    container.style.display = 'block';
+    
+    recommendations.forEach(rec => {
+        const recElement = document.createElement('div');
+        recElement.className = `recommendation priority-${rec.priority}`;
+        recElement.textContent = rec.message;
+        container.appendChild(recElement);
+    });
+}
+
+/**
+ * Hide risk widget
+ */
+function hideRiskWidget() {
+    const riskWidget = document.getElementById('riskWidget');
+    if (riskWidget) {
+        riskWidget.style.display = 'none';
+    }
+}
+
+/**
+ * Get risk assessment for current route
+ */
+async function getCurrentRouteRiskAssessment() {
+    if (window.routeData && window.routeData.stations && window.routeData.stations.length > 0) {
+        console.log(`🎯 Risk assessment for route: ${window.routeData.takeoff} → ${window.routeData.landing}`);
+        console.log(`📍 Stations: ${window.routeData.stations.join(', ')}`);
+        await updateRiskAssessment(window.routeData.stations);
+    } else {
+        console.log('⚠️ No route data available for risk assessment');
+        hideRiskWidget();
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     attachNavHandlers();
@@ -2477,4 +2925,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add "See why" functionality
     addSeeWhyListeners();
+    
+    // Initialize risk assessment
+    getCurrentRouteRiskAssessment();
 });
