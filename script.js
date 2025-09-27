@@ -307,7 +307,7 @@ async function createAnimatedMap() {
     
     // Animate flight progress
     setTimeout(() => {
-        flightProgress.style.left = '90%';
+        flightProgress.style.left = '92%';
     }, 1000);
     
     // Load aviation weather summary

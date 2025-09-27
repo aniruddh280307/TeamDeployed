@@ -572,8 +572,13 @@ async function generateManualSummary(weatherData, stations = []) {
       const sortedRisks = Object.entries(riskAssessment.individualRisks)
         .sort(([,a], [,b]) => b - a);
       
-      // Add all risk parameters (not just high-risk ones)
+      // Add risk parameters (filter out zero-risk items)
       sortedRisks.forEach(([parameter, score]) => {
+        // Skip items with zero risk score
+        if (score === 0) {
+          return;
+        }
+        
         const riskLevel = getRiskLevel(score);
         const riskEmoji = getRiskEmoji(riskLevel);
         const riskColor = getRiskColor(riskLevel);
