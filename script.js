@@ -518,11 +518,13 @@ function formatOriginalWeatherBriefing(text) {
     const lines = text.split('\n').filter(line => line.trim());
     let html = '';
     let currentCategory = '';
+    let titleAdded = false;
     
     for (const line of lines) {
-        // Handle main title
-        if (line.includes('🌤️ WEATHER BRIEFING SUMMARY')) {
+        // Handle main title (only add once)
+        if (line.includes('🌤️ WEATHER BRIEFING SUMMARY') && !titleAdded) {
             html += `<div class="weather-briefing-title">${line}</div>`;
+            titleAdded = true;
         }
         // Handle Overview category
         else if (line.includes('📊 OVERVIEW:')) {
@@ -537,21 +539,28 @@ function formatOriginalWeatherBriefing(text) {
         // Handle bullet points with tags and "See why" links
         else if (line.startsWith('•')) {
             // Extract the main content, tags, and "See why" link
-            const content = line.replace(/<[^>]*>/g, ''); // Remove HTML tags for processing
+            let content = line.replace(/<[^>]*>/g, ''); // Remove HTML tags for processing
+            // Remove any "see why" text that appears in the content
+            content = content.replace(/\s*see why\s*/gi, '').trim();
+            
             const hasTags = line.includes('<span class="tag');
             const hasSeeWhy = line.includes('<a href="#" class="see-why"');
             
             let bulletHtml = `<div class="summary-bullet ${currentCategory}-bullet">`;
+            bulletHtml += `<div class="bullet-content">`;
             bulletHtml += content;
+            bulletHtml += `</div>`;
             
-            // Add tags and "See why" link if they exist in the original line
+            // Add tags and "See why" link in a flex container for proper alignment
             if (hasTags || hasSeeWhy) {
+                bulletHtml += `<div class="bullet-actions">`;
+                
                 // Extract the HTML parts from the original line
                 const tagMatch = line.match(/<span class="tag[^"]*"[^>]*>([^<]*)<\/span>/);
                 const seeWhyMatch = line.match(/<a href="#" class="see-why"[^>]*>([^<]*)<\/a>/);
                 
                 if (tagMatch) {
-                    bulletHtml += ` <span class="tag ${tagMatch[1].toLowerCase().replace(/\s+/g, '-')}">${tagMatch[1]}</span>`;
+                    bulletHtml += `<span class="tag ${tagMatch[1].toLowerCase().replace(/\s+/g, '-')}">${tagMatch[1]}</span>`;
                 }
                 if (seeWhyMatch) {
                     // Extract data attributes for the "See why" link
@@ -559,8 +568,10 @@ function formatOriginalWeatherBriefing(text) {
                     const dataType = line.match(/data-type="([^"]*)"/);
                     const dataAttrs = dataStation && dataType ? 
                         `data-station="${dataStation[1]}" data-type="${dataType[1]}"` : '';
-                    bulletHtml += ` <a href="#" class="see-why" ${dataAttrs}>See why</a>`;
+                    bulletHtml += `<a href="#" class="see-why" ${dataAttrs}>See why</a>`;
                 }
+                
+                bulletHtml += `</div>`;
             }
             
             bulletHtml += '</div>';
@@ -763,13 +774,48 @@ function updateProfessionalWidgets(weatherData) {
     const windConditionsElement = document.getElementById('windConditionsValue');
     if (windConditionsElement && weatherData.metar && weatherData.metar.length > 0) {
         const metar = weatherData.metar[0];
-        const windSpeed = metar.windSpeed || 0;
-        const windDirection = metar.windDir || 0;
+        const windSpeed = metar.wspd || 0;
+        const windDirection = metar.wdir || 0;
         if (windSpeed > 0 && windDirection >= 0) {
-            windConditionsElement.textContent = `${windSpeed}kt ${windDirection}°`;
+            const directionText = getWindDirection(windDirection);
+            windConditionsElement.textContent = `${windSpeed}kt ${directionText}`;
         } else {
             windConditionsElement.textContent = 'Calm';
         }
+    }
+    
+    // Update Temperature Widget
+    const temperatureElement = document.getElementById('temperatureValue');
+    if (temperatureElement && weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const temperature = metar.temp;
+        if (temperature !== null && temperature !== undefined) {
+            temperatureElement.textContent = `${Math.round(temperature)}°C`;
+        } else {
+            temperatureElement.textContent = 'N/A';
+        }
+    }
+    
+    // Update Turbulence Widget
+    const turbulenceElement = document.getElementById('turbulenceValue');
+    if (turbulenceElement && weatherData.metar && weatherData.metar.length > 0) {
+        const metar = weatherData.metar[0];
+        const windSpeed = metar.wspd || 0;
+        const windGust = metar.wgst || 0;
+        const maxWind = Math.max(windSpeed, windGust);
+        
+        let turbulenceLevel = 'Light';
+        if (maxWind > 30) {
+            turbulenceLevel = 'Severe';
+        } else if (maxWind > 20) {
+            turbulenceLevel = 'Moderate';
+        } else if (maxWind > 15) {
+            turbulenceLevel = 'Light-Moderate';
+        } else {
+            turbulenceLevel = 'Light';
+        }
+        
+        turbulenceElement.textContent = turbulenceLevel;
     }
 }
 
